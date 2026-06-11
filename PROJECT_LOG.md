@@ -9,11 +9,12 @@ turns out to be wrong, add a correction entry that links back to it.
 
 ## CURRENT STATE (keep this section updated — it is the resume point)
 
-- **Active phase:** Phase 4 — Firmware
-- **Last gate passed:** Phase 3 (dashboard gate exit 0, panels live, 2026-06-11)
-- **Hardware on hand:** none yet (0 × ESP32)
-- **Next action:** csi_transmitter.ino, csi_receiver.ino, windows_setup.md
-- **Open blockers:** none
+- **Active phase:** Phase 6 — Real-world calibration (BLOCKED: awaiting ESP32 hardware)
+- **Last gate passed:** Phase 5 (all 7 docs present, 2026-06-11); Phases 0-5 all green
+- **Hardware on hand:** none yet (0 × ESP32) — see docs/hardware_bom.md
+- **Next action:** buy 2-4 ESP32 boards, flash per docs/windows_setup.md,
+  run --collect sessions, implement train_all.py --real, 24 h soak test
+- **Open blockers:** hardware purchase (user)
 
 ---
 
@@ -149,3 +150,22 @@ toolchain download.
 forwarding) is compile-verified only; first on-hardware validation is
 Phase 6.
 **Follow-up:** Phase 5 docs (already drafted in parallel).
+
+## 2026-06-11 — Phase 5 complete: documentation suite
+**Type:** success
+**Phase:** 5
+**What happened:** Wrote hardware_bom.md (parts, 2026 prices, classic-ESP32
+buying guidance), placement_guide.md (ASCII room diagrams for 1/2/3
+receivers, coverage table, degradation factors), user_manual.md (10 chapters,
+unboxing → live dashboard → real-data retraining, with an honest ch. 8 about
+synthetic-trained model limits), troubleshooting.md (30 numbered symptoms
+with fixes across install/simulation/network/flashing/quality),
+ubuntu_setup.md (dialout group, brltty gotcha, arduino-cli CLI path), and
+rewrote README.md with quick start, architecture, and doc index.
+**Result:** PASS — all 7 gate files exist (6 docs + README). Quick Start
+commands were each executed during earlier phase gates (pip install,
+setup_check, main --simulate, pytest, train_all).
+**Why it matters / lesson:** docs were drafted in parallel with the Phase 4
+toolchain download — no wall-clock wasted.
+**Follow-up:** Phase 6 awaits real hardware: --collect runs, train_all
+--real, 24 h soak test.
