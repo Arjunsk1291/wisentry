@@ -9,10 +9,10 @@ turns out to be wrong, add a correction entry that links back to it.
 
 ## CURRENT STATE (keep this section updated — it is the resume point)
 
-- **Active phase:** Phase 3 — Dashboard
-- **Last gate passed:** Phase 2 (training exit 0, presence 96.3% / pose 82.5% synthetic, 2026-06-11)
+- **Active phase:** Phase 4 — Firmware
+- **Last gate passed:** Phase 3 (dashboard gate exit 0, panels live, 2026-06-11)
 - **Hardware on hand:** none yet (0 × ESP32)
-- **Next action:** dashboard/app.py with the 7 panels
+- **Next action:** csi_transmitter.ino, csi_receiver.ino, windows_setup.md
 - **Open blockers:** none
 
 ---
@@ -106,3 +106,23 @@ metrics.json (tagged "data": "synthetic"); inference smoke tests pass
 **Known limitation:** the 5 s standing segment is absorbed by EMA lag after
 walking; logged as a tuning item for Phase 6 real-data calibration.
 **Follow-up:** Phase 3 dashboard.
+
+## 2026-06-11 — Phase 3 complete: dashboard live with 7 panels
+**Type:** success
+**Phase:** 3
+**What happened:** Built dashboard/app.py: status bar, CSI waveform (per-
+device 5 s scroll), SVG stick-figure pose panel (genuine SVG via data-URI
+img, keypoint dots overlaid, labeled experimental), top-down room map with
+estimated-person dot, color-coded 30-event log, coverage advisor keyed on
+live device count, and the device table with online/offline status. One
+200 ms dcc.Interval drives a single 7-output callback reading
+SystemState.snapshot(). Wrote tests/gate_phase3.py, which spawns
+`python main.py --simulate --duration 45`, asserts all 7 panel ids in
+/_dash-layout plus the simulation banner, then polls the Dash update
+endpoint exactly as a browser would.
+**Result:** PASS — exit 0; all panels render; status panel observed
+transitioning EMPTY → OCCUPIED → EMPTY live during the scenario loop.
+**Why it matters / lesson:** verifying panel updates through the real
+/_dash-update-component endpoint means the gate exercises the same path a
+browser does — no "it probably renders" hand-waving.
+**Follow-up:** Phase 4 firmware.
