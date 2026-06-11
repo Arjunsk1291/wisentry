@@ -1,0 +1,86 @@
+# =============================================================================
+# WiSentry configuration — every user-tunable setting lives here.
+# Edit this file, then restart:  python main.py
+# =============================================================================
+
+network:
+  # UDP port the laptop listens on for CSI packets from ESP32 receivers.
+  # Must match UDP_TARGET_PORT in firmware/csi_receiver/csi_receiver.ino.
+  udp_listen_port: 5566
+  # Interface to bind. 0.0.0.0 = all interfaces (recommended).
+  udp_listen_host: "0.0.0.0"
+  # Seconds without packets before a device is shown as OFFLINE.
+  device_timeout_seconds: 2.0
+
+dashboard:
+  # Where the web dashboard is served. Open http://localhost:8050 in a browser.
+  host: "127.0.0.1"
+  port: 8050
+  # Milliseconds between dashboard refreshes (200 ms = 5 updates/second).
+  update_interval_ms: 200
+  # Seconds of CSI history shown in the waveform panel.
+  waveform_history_seconds: 5.0
+  # Maximum entries kept in the event log panel.
+  event_log_max_entries: 30
+
+room:
+  # Room dimensions in meters, used by the Room Map panel.
+  width_meters: 5.0
+  depth_meters: 4.0
+  # Known ESP32 positions in meters from the room's top-left corner.
+  # device_id 0 is always the transmitter.
+  device_positions:
+    0: { x: 0.3, y: 2.0, label: "TX" }
+    1: { x: 4.7, y: 0.5, label: "RX-1" }
+    2: { x: 4.7, y: 3.5, label: "RX-2" }
+
+signal:
+  # Number of CSI subcarriers expected per frame (LLTF on 20 MHz = 64).
+  subcarrier_count: 64
+  # Frames per analysis window fed to the ML models.
+  window_frames: 50
+  # Number of frequency bands the 64 subcarriers are averaged into.
+  feature_bands: 16
+  # Hampel outlier filter: window radius (frames) and sigma threshold.
+  hampel_window: 5
+  hampel_sigma: 3.0
+  # Butterworth low-pass cutoff in Hz applied to amplitude time series
+  # (human motion lives below ~10 Hz).
+  lowpass_cutoff_hz: 10.0
+  # Assumed CSI frame rate in Hz (used for filter design and windows).
+  frame_rate_hz: 50.0
+
+detection:
+  # Rule-based fallback threshold on motion energy (used when no trained
+  # models exist in saved/). Tune with real hardware via --collect runs.
+  rule_motion_threshold: 1.2
+  # Consecutive agreeing windows required before presence state flips
+  # (hysteresis — prevents flicker).
+  presence_on_count: 3
+  presence_off_count: 10
+  # Minimum classifier confidence to report a pose change.
+  pose_confidence_threshold: 0.6
+  # Consecutive agreeing pose windows before the reported pose changes.
+  pose_change_count: 3
+
+ml:
+  # Directory containing trained weights (created by models/train_all.py).
+  model_dir: "saved"
+  # Set false to force the rule-based detector even if models exist.
+  use_ml_models: true
+
+logging:
+  # Directory for CSV event logs and binary CSI captures.
+  log_dir: "logs"
+  # Write raw CSI frames to a binary .npz capture (large files; off by default).
+  log_raw_csi: false
+  # Write detector events (entered/left/pose change) to CSV.
+  log_events: true
+
+simulation:
+  # Frames per second the simulator emits (kept moderate for laptop CPUs).
+  frame_rate_hz: 50.0
+  # Number of fake ESP32 receivers to simulate.
+  simulated_devices: 2
+  # Length of one scripted scenario loop in seconds (see ENGINEERING_SPEC.md §9).
+  scenario_loop_seconds: 30.0

@@ -1,0 +1,12 @@
+# WiSentry Python dependencies — pinned to the versions validated on 2026-06-11.
+# Install with:  pip install -r requirements.txt
+# torch is CPU-capable; a CUDA build also works but is not required.
+
+numpy==2.2.6
+scipy==1.15.3
+PyYAML==5.4.1
+pandas==2.3.3
+torch==2.10.0
+dash==4.2.0
+plotly==6.8.0
+pytest==9.0.3

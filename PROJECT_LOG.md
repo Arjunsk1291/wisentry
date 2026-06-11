@@ -9,11 +9,10 @@ turns out to be wrong, add a correction entry that links back to it.
 
 ## CURRENT STATE (keep this section updated — it is the resume point)
 
-- **Active phase:** Phase 0 — Environment & scaffolding (not started)
-- **Last gate passed:** none yet
+- **Active phase:** Phase 1 — Backend pipeline + simulation
+- **Last gate passed:** Phase 0 (setup_check.py exit 0, 2026-06-11)
 - **Hardware on hand:** none yet (0 × ESP32)
-- **Next action:** create directory tree, requirements.txt, config.yaml,
-  setup_check.py per ENGINEERING_SPEC.md §6 Phase 0
+- **Next action:** build backend modules in dependency order, then simulator
 - **Open blockers:** none
 
 ---
@@ -50,3 +49,15 @@ a pytest-based testing requirement; and conventional-commit git discipline.
 packet format undefined and conflated synthetic accuracy with real accuracy —
 both would have caused silent failures later.
 **Follow-up:** Begin Phase 0.
+
+## 2026-06-11 — Phase 0 complete: environment verified
+**Type:** success
+**Phase:** 0
+**What happened:** Created full directory tree, requirements.txt (pinned),
+config.yaml (8 commented sections), setup_check.py. Host already had numpy
+2.2.6 / scipy 1.15.3 / torch 2.10.0; installed dash 4.2.0, plotly 6.8.0,
+pytest 9.0.3. Ran `python3 setup_check.py`.
+**Result:** PASS — all 12 checks green, exit code 0. Ports 5566/8050 free.
+**Why it matters / lesson:** torch with CUDA was preinstalled, so no CPU-wheel
+substitution was needed; requirements.txt pins torch==2.10.0 generically.
+**Follow-up:** Phase 1 backend build.
