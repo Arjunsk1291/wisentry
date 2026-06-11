@@ -169,3 +169,18 @@ setup_check, main --simulate, pytest, train_all).
 toolchain download — no wall-clock wasted.
 **Follow-up:** Phase 6 awaits real hardware: --collect runs, train_all
 --real, 24 h soak test.
+
+## 2026-06-11 — Dashboard screenshots captured and embedded in docs
+**Type:** note
+**Phase:** 5 (addendum)
+**What happened:** Added tests/capture_screenshots.py: spawns
+`main.py --simulate`, drives headless Chromium (Playwright, dev-only
+dependency), watches the live status text, and captures the dashboard at
+four scenario moments — empty, walking (90% conf), sitting, lying. PNGs
+(1500×760, ~125 KB each) live in docs/screenshots/ and are embedded in
+README.md and user_manual.md ch. 5.
+**Result:** 4/4 captured on script, exit 0. Visual review confirmed every
+panel renders correctly; the lying shot clearly shows the 0.3 Hz breathing
+modulation in the CSI waveform — nice incidental validation of the
+simulator physics.
+**Follow-up:** re-run the script after any dashboard change.

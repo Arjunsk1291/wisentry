@@ -8,6 +8,13 @@ no radar, no cloud — 100% local.
 ![status](https://img.shields.io/badge/phases%200--5-complete-brightgreen)
 ![python](https://img.shields.io/badge/python-3.9%2B-blue)
 
+![WiSentry dashboard — person walking](docs/screenshots/dashboard_walking.png)
+*Live dashboard in simulation mode: a person walking is detected at 90%
+confidence — waveform disturbance, stick figure, room-map position, and
+event history all update at 5 Hz. More: [empty room](docs/screenshots/dashboard_empty.png) ·
+[sitting](docs/screenshots/dashboard_sitting.png) ·
+[lying](docs/screenshots/dashboard_lying.png)*
+
 ## Detection tiers
 
 | Tier | Capability | Status |

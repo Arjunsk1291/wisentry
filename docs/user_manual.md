@@ -64,6 +64,16 @@ Stop with `Ctrl+C` in the terminal.
 
 ## Chapter 5 — The dashboard, panel by panel
 
+What you should be seeing (simulation mode):
+
+| Empty room | Person lying down |
+|---|---|
+| ![empty](screenshots/dashboard_empty.png) | ![lying](screenshots/dashboard_lying.png) |
+
+Note in the right-hand shot how the CSI waveform shows a slow sine wave —
+that is the simulated person's **breathing** modulating the radio field,
+and it's exactly what keeps presence latched while someone lies still.
+
 1. **STATUS BAR** — the headline: OCCUPIED/EMPTY, current pose with a
    confidence bar, and how many ESP32 receivers are online.
 2. **CSI WAVEFORM** — the last 5 seconds of raw signal level, one line
