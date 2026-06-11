@@ -126,3 +126,26 @@ transitioning EMPTY → OCCUPIED → EMPTY live during the scenario loop.
 /_dash-update-component endpoint means the gate exercises the same path a
 browser does — no "it probably renders" hand-waving.
 **Follow-up:** Phase 4 firmware.
+
+## 2026-06-11 — Phase 4 complete: firmware written and compile-verified
+**Type:** success
+**Phase:** 4
+**What happened:** Wrote csi_transmitter.ino (SoftAP "WiSentry" on channel 6,
+100 Hz UDP sounding broadcasts, heartbeat LED + serial status) and
+csi_receiver.ino (station mode, esp_wifi_set_csi capture, callback-to-ring-
+buffer design so network sends happen in loop() not in the WiFi driver task,
+packed-struct protocol-v1 datagrams broadcast to 192.168.4.255:5566, auto-
+reconnect). Wrote docs/windows_setup.md (drivers CP210x/CH340, Arduino IDE,
+board settings, BOOT-button workaround, serial verification). Installed
+arduino-cli 1.5.1 + esp32:esp32 core 3.3.10 locally and compiled both
+sketches for fqbn esp32:esp32:esp32.
+**Result:** PASS — transmitter: 902,136 bytes (68% flash); receiver:
+903,772 bytes (68% flash); zero warnings shown. One compile error found and
+fixed: `WiFiUdp` typo for the `WiFiUDP` class.
+**Why it matters / lesson:** the gate's arduino-cli path caught a real error
+that a "manual syntax review" would plausibly have missed — worth the 1.5 GB
+toolchain download.
+**Hardware-pending caveat:** runtime behaviour (CSI rate, RSSI, broadcast
+forwarding) is compile-verified only; first on-hardware validation is
+Phase 6.
+**Follow-up:** Phase 5 docs (already drafted in parallel).
