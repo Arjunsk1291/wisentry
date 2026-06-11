@@ -9,10 +9,10 @@ turns out to be wrong, add a correction entry that links back to it.
 
 ## CURRENT STATE (keep this section updated — it is the resume point)
 
-- **Active phase:** Phase 1 — Backend pipeline + simulation
-- **Last gate passed:** Phase 0 (setup_check.py exit 0, 2026-06-11)
+- **Active phase:** Phase 2 — ML models
+- **Last gate passed:** Phase 1 (60 s headless sim, exit 0, 5956 frames, 2026-06-11)
 - **Hardware on hand:** none yet (0 × ESP32)
-- **Next action:** build backend modules in dependency order, then simulator
+- **Next action:** build models/ + train_all.py, train on simulator physics
 - **Open blockers:** none
 
 ---
@@ -61,3 +61,25 @@ pytest 9.0.3. Ran `python3 setup_check.py`.
 **Why it matters / lesson:** torch with CUDA was preinstalled, so no CPU-wheel
 substitution was needed; requirements.txt pins torch==2.10.0 generically.
 **Follow-up:** Phase 1 backend build.
+
+## 2026-06-11 — Phase 1 complete: full pipeline runs on synthetic CSI
+**Type:** success
+**Phase:** 1
+**What happened:** Built backend (config_loader, csi_parser, signal_processor,
+detector+SystemState, skeleton, ml_engine, data_logger, udp_server), the
+physics-based simulator, main.py, and a 24-test pytest suite. Wire protocol v1
+pinned with a byte-level test vector. Gate run:
+`python3 main.py --simulate --headless --duration 60`.
+**Result:** PASS — exit 0, 5956 frames received and processed (gate needs
+≥1000), 0 parse errors, 585 detection windows. Presence events fired at +5 s
+(entered) and +29 s (left) in both 30 s scenario loops — exactly on script.
+pytest: 24/24 passed.
+**Why it matters / lesson:** Two bugs caught by self-tests before they could
+hide: (1) a hand-computed wire-format test vector had 2 extra hex chars —
+the pinned vector now comes from verified struct output; (2) event logging
+via snapshot-diff missed events once the deque was full — replaced with an
+event-listener callback on SystemState.
+**Failure note (accepted):** the rule-based fallback misclassifies
+sitting-vs-lying (only presence is gated in Phase 1); ML models own pose
+accuracy from Phase 2 on.
+**Follow-up:** Phase 2 — models + training on simulator physics.
