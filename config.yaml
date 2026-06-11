@@ -61,7 +61,7 @@ detection:
   # Minimum classifier confidence to report a pose change.
   pose_confidence_threshold: 0.6
   # Consecutive agreeing pose windows before the reported pose changes.
-  pose_change_count: 3
+  pose_change_count: 4
 
 ml:
   # Directory containing trained weights (created by models/train_all.py).

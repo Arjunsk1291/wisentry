@@ -34,6 +34,7 @@ RULE_PRESENCE_PROBABILITY_OFF = 0.1
 RULE_WALKING_MOTION_FACTOR = 4.0     # motion >= factor*threshold => walking
 RULE_BREATHING_PRESENCE_BONUS = 0.35  # breathing evidence lowers the bar
 POSITION_SMOOTHING_ALPHA = 0.2       # EMA for the room-map position dot
+POSE_PROBABILITY_EMA_ALPHA = 0.3     # temporal smoothing of pose votes
 
 
 class SystemState:
@@ -178,6 +179,8 @@ class PresencePoseDetector:
         self._pose_candidate_votes = 0
         self._smoothed_position = None
         self._last_deviation_per_device = {}
+        self._last_pose_probabilities_per_device = {}
+        self._pose_probability_ema = None
 
     def _rule_based_scores(self, feature_window):
         """Score presence/pose from thresholds when no ML is available.
@@ -229,6 +232,8 @@ class PresencePoseDetector:
             self._current_pose = None
             self._pose_candidate = None
             self._pose_candidate_votes = 0
+            self._last_pose_probabilities_per_device.clear()
+            self._pose_probability_ema = None
             self._state.add_event(EVENT_KIND_LEFT, "Room is now empty")
 
     def _update_pose(self, pose_probabilities):
@@ -320,10 +325,29 @@ class PresencePoseDetector:
             )
             skeleton_offsets = None
         self._update_presence(presence_probability)
+        # Pose votes from different receivers can disagree window-to-window;
+        # average the latest probabilities across devices so one flaky
+        # receiver cannot flip the reported pose.
+        self._last_pose_probabilities_per_device[feature_window.device_id] = (
+            pose_probabilities
+        )
+        fused_pose_probabilities = np.mean(
+            list(self._last_pose_probabilities_per_device.values()), axis=0
+        )
+        # Temporal EMA on top of device fusion: breathing-induced classifier
+        # wobble is faster than real pose changes, so smooth it out.
+        if self._pose_probability_ema is None:
+            self._pose_probability_ema = fused_pose_probabilities
+        else:
+            alpha = POSE_PROBABILITY_EMA_ALPHA
+            self._pose_probability_ema = (
+                (1 - alpha) * self._pose_probability_ema
+                + alpha * fused_pose_probabilities
+            )
         pose_confidence = 0.0
         keypoints = None
         if self._presence:
-            pose_confidence = self._update_pose(pose_probabilities)
+            pose_confidence = self._update_pose(self._pose_probability_ema)
             if self._current_pose is not None:
                 keypoints = self._skeleton_estimator.estimate(
                     self._current_pose,

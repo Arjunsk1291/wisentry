@@ -9,10 +9,10 @@ turns out to be wrong, add a correction entry that links back to it.
 
 ## CURRENT STATE (keep this section updated — it is the resume point)
 
-- **Active phase:** Phase 2 — ML models
-- **Last gate passed:** Phase 1 (60 s headless sim, exit 0, 5956 frames, 2026-06-11)
+- **Active phase:** Phase 3 — Dashboard
+- **Last gate passed:** Phase 2 (training exit 0, presence 96.3% / pose 82.5% synthetic, 2026-06-11)
 - **Hardware on hand:** none yet (0 × ESP32)
-- **Next action:** build models/ + train_all.py, train on simulator physics
+- **Next action:** dashboard/app.py with the 7 panels
 - **Open blockers:** none
 
 ---
@@ -83,3 +83,26 @@ event-listener callback on SystemState.
 sitting-vs-lying (only presence is gated in Phase 1); ML models own pose
 accuracy from Phase 2 on.
 **Follow-up:** Phase 2 — models + training on simulator physics.
+
+## 2026-06-11 — Phase 2: models trained; pose-flicker failure found and fixed
+**Type:** failure → success
+**Phase:** 2
+**What happened:** Built the three models (shared 50k-param CNN backbone) and
+train_all.py, which generates labeled windows by pushing simulator physics
+through the real SignalProcessor. First training run: presence 97.0%, pose
+90.8% (synthetic). But the end-to-end 60 s run showed severe pose flicker
+(~25 spurious pose changes), even after fusing votes across devices.
+**Root cause:** training sequences all started at breathing phase 0, so the
+classifier never learned phase invariance — steep parts of the 0.3 Hz
+breathing sinusoid classify as "walking".
+**Fix:** (1) random breathing-phase offset per training sequence, (2) EMA
+smoothing (α=0.3) of device-fused pose probabilities in the detector,
+(3) pose_change_count 3→4. Retrained: presence 96.33%, pose 82.50%
+(synthetic — lower but honest; the phase-randomized dataset is harder).
+**Result:** PASS — train_all.py exit 0; saved/ has 3 weight files +
+metrics.json (tagged "data": "synthetic"); inference smoke tests pass
+(27/27 pytest); 60 s gate exit 0 with the pose sequence tracking the script
+(walking→sitting→lying→walking, enter +5 s / leave +30 s, both loops).
+**Known limitation:** the 5 s standing segment is absorbed by EMA lag after
+walking; logged as a tuning item for Phase 6 real-data calibration.
+**Follow-up:** Phase 3 dashboard.
