@@ -3,10 +3,11 @@
 **WiFi CSI human presence & pose detection.** ESP32 microcontrollers sense
 people by measuring how their bodies disturb WiFi radio waves (Channel State
 Information). A laptop runs the ML inference and a live dashboard. No cameras,
-no radar, no cloud — 100% local.
+no radar, no cloud - the runtime is local.
 
 ![status](https://img.shields.io/badge/phases%200--5-complete-brightgreen)
-![python](https://img.shields.io/badge/python-3.9%2B-blue)
+![CI](https://github.com/Arjunsk1291/wisentry/actions/workflows/ci.yml/badge.svg)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 ![WiSentry dashboard — person walking](docs/screenshots/dashboard_walking.png)
 *Live dashboard in simulation mode: a person walking is detected at 90%
@@ -23,7 +24,7 @@ event history all update at 5 Hz. More: [empty room](docs/screenshots/dashboard_
 | 2 | Pose (standing / sitting / lying / walking) | ✅ working (synthetic-trained; calibrate on real data) |
 | 3 | 17-point skeleton | 🧪 experimental, demo quality |
 
-## Quick start — 5 minutes, zero hardware
+## Quick start - simulation, no hardware
 
 ```bash
 git clone https://github.com/Arjunsk1291/wisentry.git
@@ -35,6 +36,14 @@ python main.py --simulate      # then open http://localhost:8050
 
 You get the full live dashboard driven by a physics-based CSI simulator: a
 scripted person walks in, stands, sits, lies down, and leaves every 30 s.
+This validates the software path only. It is not evidence of real-world sensing
+accuracy.
+
+## Real-hardware status
+
+The firmware and setup path are included, but this repository does not yet
+publish a reproduced real-room calibration result. Treat the hardware path and
+all real-world accuracy as work to validate, not as a completed claim.
 
 ## With real hardware
 
@@ -57,7 +66,7 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 ```
 
 - **Wire protocol v1** is pinned byte-for-byte across firmware, simulator,
-  and parser ([ENGINEERING_SPEC.md](ENGINEERING_SPEC.md) §5.2) with a shared test vector.
+  and parser ([engineering specification](ENGINEERING_SPEC.md#52-wire-protocol-v1--single-source-of-truth)) with a shared test vector.
 - **Training = runtime**: `models/train_all.py` generates data by pushing
   simulator physics through the same SignalProcessor used live.
 - **Honest metrics**: shipped weights are synthetic-trained
@@ -86,4 +95,6 @@ python tests/gate_phase3.py --spawn   # end-to-end dashboard gate
 ```
 
 Project history, including what failed and why, lives in
-[PROJECT_LOG.md](PROJECT_LOG.md).
+[PROJECT_LOG.md](PROJECT_LOG.md). CI runs the test suite on Python 3.10 and 3.11.
+Model-dependent tests skip when synthetic-trained weights are absent; the status
+is reported rather than treated as a verified model result.
