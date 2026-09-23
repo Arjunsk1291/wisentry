@@ -215,6 +215,11 @@ class SignalProcessor:
         self._mean_history_per_device = {}
         self._baseline_samples_per_device = {}
         self._baseline_per_device = {}
+        self.last_band_vector_per_device = {}
+
+    def baselines(self):
+        """Empty-room (mean, std) band baselines per device (copy)."""
+        return dict(self._baseline_per_device)
 
     def _device_buffers(self, device_id):
         """Get (creating on first use) the rolling buffers for a device."""
@@ -314,6 +319,7 @@ class SignalProcessor:
         band_vector = average_into_bands(cleaned_amplitudes, self.feature_bands)
         self._update_baseline(csi_frame.device_id, band_vector)
         band_history.append(band_vector)
+        self.last_band_vector_per_device[csi_frame.device_id] = band_vector
         mean_history.append(float(band_vector.mean()))
         if len(band_history) < self.window_frames:
             return None

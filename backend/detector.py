@@ -62,6 +62,7 @@ class SystemState:
         self._events = deque(maxlen=event_log_max_entries)
         self._device_stats = {}
         self._waveforms = {}
+        self._analytics = {}
         self._frames_processed = 0
         self._windows_processed = 0
 
@@ -108,6 +109,11 @@ class SystemState:
             self._keypoints = keypoints
             self._position_estimate = position_estimate
 
+    def update_analytics(self, analytics):
+        """Store the latest CsiAnalytics.compute() result."""
+        with self._lock:
+            self._analytics = analytics
+
     def add_event(self, event_kind, message):
         """Append a timestamped event and notify registered listeners."""
         with self._lock:
@@ -144,6 +150,7 @@ class SystemState:
                     for device_id, points in self._waveforms.items()
                 },
                 "frames_processed": self._frames_processed,
+                "analytics": self._analytics,
                 "windows_processed": self._windows_processed,
             }
 

@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCREENSHOT_DIRECTORY = PROJECT_ROOT / "docs" / "screenshots"
 DASHBOARD_URL = "http://127.0.0.1:8050"
 VIEWPORT = {"width": 1500, "height": 1150}
-CONTENT_HEIGHT_PX = 760  # panels end here; crop the empty page below
+CONTENT_HEIGHT_PX = 1060  # panels end here; crop the empty page below
 APP_STARTUP_TIMEOUT_SECONDS = 40
 SCENARIO_WAIT_TIMEOUT_SECONDS = 70
 # Captures: filename -> (status substring, pose substring or None)
@@ -35,6 +35,20 @@ CAPTURE_PLAN = [
     ("dashboard_sitting.png", "OCCUPIED", "sitting"),
     ("dashboard_lying.png", "OCCUPIED", "lying"),
 ]
+# Respiration needs ~12 s of stillness; the scripted scenario is still from
+# second 10 to 25, so the lying shot waits (briefly) for a vitals reading.
+WAIT_FOR_VITALS = {"dashboard_lying.png"}
+VITALS_WAIT_SECONDS = 5.0
+
+
+def wait_for_vitals(page):
+    """Give the respiration panel a few seconds to show a rate."""
+    deadline = time.time() + VITALS_WAIT_SECONDS
+    while time.time() < deadline:
+        if "--" not in page.inner_text("#panel-vitals"):
+            return True
+        time.sleep(0.3)
+    return False
 
 
 def wait_for_state(page, status_substring, pose_substring):
@@ -79,7 +93,7 @@ def main():
                 try:
                     page.goto(DASHBOARD_URL, timeout=5000)
                     page.wait_for_selector("#panel-status-bar div",
-                                           timeout=5000)
+                                           timeout=20000)
                     break
                 except Exception:
                     if time.time() > deadline:
@@ -93,6 +107,8 @@ def main():
                 if not wait_for_state(page, status_needed, pose_needed):
                     print(f"FAIL: never saw {status_needed}/{pose_needed}")
                     return 1
+                if filename in WAIT_FOR_VITALS:
+                    wait_for_vitals(page)
                 page.wait_for_timeout(400)  # let all panels catch up
                 page.screenshot(
                     path=str(SCREENSHOT_DIRECTORY / filename),

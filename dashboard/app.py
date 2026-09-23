@@ -124,8 +124,24 @@ def build_layout(simulation_mode, update_interval_ms):
                              style={"textAlign": "center"}),
                 ]),
                 html.Div(style=PANEL_STYLE, children=[
-                    _panel_title("ROOM MAP"),
+                    _panel_title("ROOM · 3D LINK MAP"),
                     dcc.Graph(id="panel-room-map",
+                              config={"displayModeBar": False}),
+                ]),
+            ]),
+            html.Div(style={"display": "flex", "flexWrap": "wrap"}, children=[
+                html.Div(style=PANEL_STYLE, children=[
+                    _panel_title("VITALS · RESPIRATION"),
+                    html.Div(id="panel-vitals"),
+                ]),
+                html.Div(style=PANEL_STYLE, children=[
+                    _panel_title("MOTION SPECTROGRAM (PCA + STFT)"),
+                    dcc.Graph(id="panel-spectrogram",
+                              config={"displayModeBar": False}),
+                ]),
+                html.Div(style=PANEL_STYLE, children=[
+                    _panel_title("SUBCARRIER ATTENUATION"),
+                    dcc.Graph(id="panel-heatmap",
                               config={"displayModeBar": False}),
                 ]),
             ]),
@@ -245,6 +261,22 @@ def _keypoints_to_svg(keypoints, pose_label):
     return f"data:image/svg+xml;base64,{encoded}"
 
 
+def _grid_lines(x0, x1, y0, y1, step):
+    """One polyline (None-separated) for a floor grid - a single trace."""
+    xs, ys = [], []
+    count_x = int(round((x1 - x0) / step))
+    count_y = int(round((y1 - y0) / step))
+    for i in range(count_x + 1):
+        g = x0 + i * step
+        xs += [g, g, None]
+        ys += [y0, y1, None]
+    for i in range(count_y + 1):
+        g = y0 + i * step
+        xs += [x0, x1, None]
+        ys += [g, g, None]
+    return xs, ys
+
+
 # COCO-17 index groups used by the 3D lift.
 _LEFT_ARM = (7, 9)
 _RIGHT_ARM = (8, 10)
@@ -303,16 +335,11 @@ def render_pose_3d(keypoints, pose_label, confidence=None):
     xs, ys, zs = lift_keypoints_3d(keypoints, pose_label)
     figure = go.Figure()
     # Floor grid and a soft shadow ring under the body.
-    grid = [i * 0.2 for i in range(-5, 6)]
-    for g in grid:
-        figure.add_trace(go.Scatter3d(
-            x=[g, g], y=[-1.0, 1.0], z=[0, 0], mode="lines",
-            line={"color": "#0f3b47", "width": 1},
-            hoverinfo="skip", showlegend=False))
-        figure.add_trace(go.Scatter3d(
-            x=[-1.0, 1.0], y=[g, g], z=[0, 0], mode="lines",
-            line={"color": "#0f3b47", "width": 1},
-            hoverinfo="skip", showlegend=False))
+    gx, gy = _grid_lines(-1.0, 1.0, -1.0, 1.0, 0.2)
+    figure.add_trace(go.Scatter3d(
+        x=gx, y=gy, z=[0 if v is not None else None for v in gx],
+        mode="lines", line={"color": "#0f3b47", "width": 1},
+        hoverinfo="skip", showlegend=False))
     center_x = (xs[11] + xs[12]) / 2
     center_y = (ys[11] + ys[12]) / 2
     ring = [i * 2 * math.pi / 40 for i in range(41)]
@@ -356,6 +383,7 @@ def render_pose_3d(keypoints, pose_label, confidence=None):
         font={"family": FONT_STACK, "size": 11},
         title={"text": title, "x": 0.5, "y": 0.97,
                "font": {"color": TEXT_COLOR, "size": 12}},
+        uirevision="pose",
         scene={"xaxis": {**axis, "range": [-1.1, 1.1]},
                "yaxis": {**axis, "range": [-1.1, 1.1]},
                "zaxis": {**axis, "range": [0, 1.95]},
@@ -384,34 +412,217 @@ def render_pose_figure(snapshot):
         style={"height": "260px"})
 
 
+ROOM_HEIGHT_METERS = 2.6
+DEVICE_HEIGHT_METERS = 1.0
+
+
+def _room_wireframe(width, depth, height):
+    """Line segments for the room box (floor, ceiling edges, corners)."""
+    corners = [(0, 0), (width, 0), (width, depth), (0, depth), (0, 0)]
+    xs, ys, zs = [], [], []
+    for z in (0.0, height):
+        xs += [c[0] for c in corners] + [None]
+        ys += [c[1] for c in corners] + [None]
+        zs += [z] * len(corners) + [None]
+    for cx, cy in corners[:4]:
+        xs += [cx, cx, None]
+        ys += [cy, cy, None]
+        zs += [0.0, height, None]
+    return xs, ys, zs
+
+
 def render_room_map(snapshot, room_config):
-    """PANEL 4 — top-down room with device dots and estimated person dot."""
+    """PANEL 4 — 3D room: walls, receivers, live TX→RX links, person."""
     width = float(room_config["width_meters"])
     depth = float(room_config["depth_meters"])
     figure = go.Figure()
+    gx, gy = _grid_lines(0.0, width, 0.0, depth, 0.5)
+    figure.add_trace(go.Scatter3d(
+        x=gx, y=gy, z=[0 if v is not None else None for v in gx],
+        mode="lines", line={"color": "#0f3b47", "width": 1},
+        hoverinfo="skip", showlegend=False))
+    wx, wy, wz = _room_wireframe(width, depth, ROOM_HEIGHT_METERS)
+    figure.add_trace(go.Scatter3d(
+        x=wx, y=wy, z=wz, mode="lines",
+        line={"color": "#1f6f86", "width": 3}, hoverinfo="skip",
+        showlegend=False))
     positions = room_config.get("device_positions", {})
-    figure.add_trace(go.Scatter(
+    activity = (snapshot.get("analytics") or {}).get("link_activity", {})
+    transmitter = None
+    for key, position in positions.items():
+        if str(position.get("label", "")).upper().startswith("TX"):
+            transmitter = position
+    if transmitter is not None:
+        for key, position in positions.items():
+            if position is transmitter:
+                continue
+            level = float(activity.get(int(key), 0.0))
+            glow = min(1.0, level / 1.5)
+            color = (f"rgb({int(34 + 200 * glow)}, "
+                     f"{int(211 - 120 * glow)}, {int(238 - 60 * glow)})")
+            figure.add_trace(go.Scatter3d(
+                x=[transmitter["x"], position["x"]],
+                y=[transmitter["y"], position["y"]],
+                z=[DEVICE_HEIGHT_METERS] * 2, mode="lines",
+                line={"color": color, "width": 3 + 9 * glow},
+                hoverinfo="skip", showlegend=False))
+    figure.add_trace(go.Scatter3d(
         x=[p["x"] for p in positions.values()],
         y=[p["y"] for p in positions.values()],
-        mode="markers+text", name="ESP32",
-        text=[p["label"] for p in positions.values()],
-        textposition="top center", textfont={"color": TEXT_COLOR},
-        marker={"color": ACCENT_CYAN, "size": 14, "symbol": "square"},
-    ))
+        z=[DEVICE_HEIGHT_METERS] * len(positions),
+        mode="markers+text", text=[p["label"] for p in positions.values()],
+        textposition="top center", textfont={"color": TEXT_COLOR, "size": 10},
+        marker={"color": ACCENT_CYAN, "size": 6, "symbol": "square"},
+        hoverinfo="skip", showlegend=False))
     person = snapshot["position_estimate"]
-    if person is not None:
-        figure.add_trace(go.Scatter(
-            x=[person[0]], y=[person[1]], mode="markers", name="person (est.)",
-            marker={"color": "#fb923c", "size": 20},
-        ))
+    pose_label = snapshot["pose_label"]
+    if person is not None and snapshot["presence"] and pose_label:
+        keypoints = snapshot["keypoints"]
+        if keypoints is None:
+            keypoints = POSE_TEMPLATES[pose_label]
+        xs, ys, zs = lift_keypoints_3d(keypoints, pose_label)
+        px, py = float(person[0]), float(person[1])
+        bx, by, bz = [], [], []
+        for a, b in SKELETON_BONES:
+            bx += [px + xs[a], px + xs[b], None]
+            by += [py + ys[a], py + ys[b], None]
+            bz += [zs[a], zs[b], None]
+        figure.add_trace(go.Scatter3d(
+            x=bx, y=by, z=bz, mode="lines",
+            line={"color": "#fb923c", "width": 6}, hoverinfo="skip",
+            showlegend=False))
+        figure.add_trace(go.Scatter3d(
+            x=[px + xs[0]], y=[py + ys[0]], z=[zs[0] + 0.05],
+            mode="markers", marker={"size": 8, "color": "#fb923c"},
+            hoverinfo="skip", showlegend=False))
+        figure.add_trace(go.Scatter3d(
+            x=[px], y=[py], z=[0.0], mode="markers+text",
+            text=[f"({px:.1f}, {py:.1f}) m"], textposition="bottom center",
+            textfont={"color": "#fdba74", "size": 10},
+            marker={"size": 5, "color": "#fb923c", "symbol": "circle-open"},
+            hoverinfo="skip", showlegend=False))
+    axis = {"visible": False, "showbackground": False}
+    figure.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", height=260,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        font={"family": FONT_STACK, "size": 11},
+        uirevision="room",
+        scene={"xaxis": {**axis, "range": [-0.2, width + 0.2]},
+               "yaxis": {**axis, "range": [-0.2, depth + 0.2]},
+               "zaxis": {**axis, "range": [0, ROOM_HEIGHT_METERS + 0.1]},
+               "aspectmode": "data",
+               "camera": {"eye": {"x": -1.05, "y": -1.5, "z": 1.1},
+                          "center": {"x": 0, "y": 0, "z": -0.15}}},
+    )
+    return figure
+
+
+def _empty_figure(message, height=200):
+    """Placeholder figure with a centred message."""
+    figure = go.Figure()
+    figure.add_annotation(text=message, showarrow=False,
+                          font={"color": MUTED_TEXT, "size": 12})
     figure.update_layout(
         template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor=PLOT_COLOR, font={"family": FONT_STACK, "size": 11}, height=240,
-        margin={"l": 30, "r": 10, "t": 10, "b": 30},
-        xaxis={"range": [-0.3, width + 0.3], "title": "meters"},
-        yaxis={"range": [depth + 0.3, -0.3], "scaleanchor": "x"},
-        showlegend=False,
-    )
+        plot_bgcolor="rgba(0,0,0,0)", height=height,
+        margin={"l": 10, "r": 10, "t": 10, "b": 10},
+        xaxis={"visible": False}, yaxis={"visible": False})
+    return figure
+
+
+def render_vitals(snapshot):
+    """PANEL — respiration rate (BNR-weighted FFT) with waveform."""
+    analytics = snapshot.get("analytics") or {}
+    breathing = analytics.get("breathing")
+    still = snapshot["presence"] and snapshot["pose_label"] in (
+        "standing", "sitting", "lying")
+    if not still or breathing is None:
+        reason = ("waiting for a still person" if snapshot["presence"]
+                  else "no person detected")
+        return html.Div([
+            html.Div("-- br/min", style={"fontSize": "34px",
+                                         "color": MUTED_TEXT}),
+            html.Div(f"respiration: {reason}",
+                     style={"color": MUTED_TEXT, "fontSize": "12px"}),
+        ], style={"padding": "40px 0", "textAlign": "center"})
+    waveform = breathing["waveform"][-200:]
+    rate = breathing["waveform_rate_hz"]
+    times = [(i - len(waveform)) / rate for i in range(len(waveform))]
+    figure = go.Figure(go.Scatter(
+        x=times, y=waveform, mode="lines",
+        line={"color": "#34d399", "width": 2}, hoverinfo="skip"))
+    figure.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PLOT_COLOR, height=150,
+        margin={"l": 30, "r": 10, "t": 5, "b": 25},
+        font={"family": FONT_STACK, "size": 10},
+        xaxis={"title": "s", "gridcolor": GRID_COLOR},
+        yaxis={"showticklabels": False, "gridcolor": GRID_COLOR},
+        showlegend=False)
+    per_device = analytics.get("breathing_per_device", {})
+    detail = "  ".join(f"RX-{d}: {v:.1f}" for d, v in sorted(per_device.items()))
+    return html.Div([
+        html.Div([
+            html.Span(f"{breathing['bpm']:.1f}", style={
+                "fontSize": "40px", "fontWeight": "bold", "color": "#34d399",
+                "textShadow": "0 0 12px rgba(52,211,153,0.6)"}),
+            html.Span(" br/min", style={"color": MUTED_TEXT}),
+            html.Span(f"   BNR {breathing['bnr']:.2f} · "
+                      f"{breathing['devices']} RX · "
+                      f"{breathing.get('window_seconds', 0):.0f} s window"
+                      + (" · settling" if breathing.get(
+                          "window_seconds", 99) < 20 else ""),
+                      style={"color": MUTED_TEXT, "fontSize": "12px",
+                             "marginLeft": "12px"}),
+        ]),
+        dcc.Graph(figure=figure, config={"displayModeBar": False}),
+        html.Div(detail, style={"color": MUTED_TEXT, "fontSize": "11px"}),
+    ])
+
+
+def render_spectrogram(snapshot):
+    """PANEL — CARM-style PCA + STFT motion spectrogram."""
+    spectrogram = (snapshot.get("analytics") or {}).get("spectrogram")
+    if spectrogram is None:
+        return _empty_figure("collecting 4 s of CSI…", 230)
+    figure = go.Figure(go.Heatmap(
+        z=spectrogram["power"], x=spectrogram["times"],
+        y=spectrogram["freqs"], colorscale="Plasma", showscale=False,
+        hoverinfo="skip"))
+    figure.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PLOT_COLOR, height=230,
+        margin={"l": 40, "r": 10, "t": 24, "b": 30},
+        font={"family": FONT_STACK, "size": 10},
+        title={"text": f"RX-{spectrogram['device_id']} · motion index "
+                       f"{spectrogram['speed_index']:.2f} Hz",
+               "x": 0.02, "font": {"size": 11, "color": TEXT_COLOR}},
+        xaxis={"title": "seconds ago"}, yaxis={"title": "Hz"})
+    return figure
+
+
+def render_heatmap(snapshot):
+    """PANEL — per-band body-shadow attenuation over the last seconds."""
+    heatmap = (snapshot.get("analytics") or {}).get("heatmap")
+    if heatmap is None:
+        return _empty_figure("collecting CSI…", 230)
+    values = heatmap["values"]
+    columns = len(values[0]) if values else 0
+    seconds = heatmap["seconds"]
+    figure = go.Figure(go.Heatmap(
+        z=values, x=[-seconds + seconds * (i + 1) / columns
+                     for i in range(columns)],
+        y=list(range(len(values))), colorscale="Viridis", zmin=-0.1,
+        zmax=0.6, showscale=False, hoverinfo="skip"))
+    figure.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PLOT_COLOR, height=230,
+        margin={"l": 40, "r": 10, "t": 24, "b": 30},
+        font={"family": FONT_STACK, "size": 10},
+        title={"text": f"RX-{heatmap['device_id']} · attenuation vs "
+                       "empty room", "x": 0.02,
+               "font": {"size": 11, "color": TEXT_COLOR}},
+        xaxis={"title": "seconds ago"}, yaxis={"title": "subcarrier band"})
     return figure
 
 
@@ -503,6 +714,9 @@ def run_dashboard(config, system_state, duration=None):
         Output("panel-event-log", "children"),
         Output("panel-coverage", "children"),
         Output("panel-device-table", "children"),
+        Output("panel-vitals", "children"),
+        Output("panel-spectrogram", "figure"),
+        Output("panel-heatmap", "figure"),
         Input("refresh-tick", "n_intervals"),
     )
     def refresh_all_panels(_tick_count):
@@ -516,6 +730,9 @@ def run_dashboard(config, system_state, duration=None):
             render_event_log(snapshot),
             render_coverage(snapshot),
             render_device_table(snapshot),
+            render_vitals(snapshot),
+            render_spectrogram(snapshot),
+            render_heatmap(snapshot),
         )
 
     host = dashboard_config["host"]

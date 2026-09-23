@@ -98,7 +98,7 @@ def synthesize_csi_vector(
         dip_center_subcarrier (float): Center of the body-shadow dip.
         random_generator (np.random.Generator): Source of randomness.
         variation (dict | None): Optional per-person/per-room multipliers
-            {"depth", "width", "noise"} for domain randomisation (body
+            {"depth", "width", "noise", "breathing_hz"} for domain randomisation (body
             size, distance to the link, room noise). None = nominal physics.
 
     Returns:
@@ -118,8 +118,9 @@ def synthesize_csi_vector(
             -((subcarrier_indices - dip_center_subcarrier) ** 2)
             / (2.0 * signature["width"] ** 2)
         )
+        breathing_hz = variation.get("breathing_hz", BREATHING_FREQUENCY_HZ)
         breathing_modulation = signature["breathing"] * np.sin(
-            2.0 * np.pi * BREATHING_FREQUENCY_HZ * elapsed_seconds
+            2.0 * np.pi * breathing_hz * elapsed_seconds
         )
         motion_noise = random_generator.normal(
             0, signature["motion"], SUBCARRIER_COUNT

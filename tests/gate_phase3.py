@@ -2,7 +2,7 @@
 
 Start `python main.py --simulate --duration 45` in another terminal (or
 let this script start it itself with --spawn), then this script:
-  1. fetches the page and layout (all 7 panel ids must exist),
+  1. fetches the page and layout (all panel ids must exist),
   2. polls the Dash update endpoint like a browser would,
   3. confirms every panel returns content and that the status panel
      transitions EMPTY → OCCUPIED as the simulated person walks in.
@@ -20,14 +20,16 @@ DASHBOARD_URL = "http://127.0.0.1:8050"
 PANEL_IDS = [
     "panel-status-bar", "panel-waveform", "panel-pose-figure",
     "panel-room-map", "panel-event-log", "panel-coverage",
-    "panel-device-table",
+    "panel-device-table", "panel-vitals", "panel-spectrogram",
+    "panel-heatmap",
 ]
 CALLBACK_PAYLOAD = {
     "output": (
         "..panel-status-bar.children...panel-waveform.figure..."
         "panel-pose-figure.children...panel-room-map.figure..."
         "panel-event-log.children...panel-coverage.children..."
-        "panel-device-table.children.."
+        "panel-device-table.children...panel-vitals.children..."
+        "panel-spectrogram.figure...panel-heatmap.figure.."
     ),
     "outputs": [
         {"id": "panel-status-bar", "property": "children"},
@@ -37,6 +39,9 @@ CALLBACK_PAYLOAD = {
         {"id": "panel-event-log", "property": "children"},
         {"id": "panel-coverage", "property": "children"},
         {"id": "panel-device-table", "property": "children"},
+        {"id": "panel-vitals", "property": "children"},
+        {"id": "panel-spectrogram", "property": "figure"},
+        {"id": "panel-heatmap", "property": "figure"},
     ],
     "inputs": [{"id": "refresh-tick", "property": "n_intervals", "value": 1}],
     "changedPropIds": ["refresh-tick.n_intervals"],
@@ -91,7 +96,7 @@ def main():
         for panel_id in PANEL_IDS:
             assert panel_id in layout_json, f"layout missing {panel_id}"
         assert "SIMULATION MODE" in layout_json
-        print("gate: layout contains all 7 panels + simulation banner")
+        print("gate: layout contains all panels + simulation banner")
 
         first_poll = poll_panels()
         assert set(first_poll) == set(PANEL_IDS), "callback panel set wrong"

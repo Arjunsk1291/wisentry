@@ -22,12 +22,14 @@ import time
 
 from backend.config_loader import ConfigError, load_config
 from backend.data_logger import DataLogger
+from backend.csi_analytics import CsiAnalytics
 from backend.detector import PresencePoseDetector, SystemState
 from backend.ml_engine import MlEngine
 from backend.signal_processor import SignalProcessor
 from backend.udp_server import UdpCsiServer
 
 PIPELINE_QUEUE_POLL_SECONDS = 0.5
+ANALYTICS_PERIOD_SECONDS = 1.0
 INFERENCE_STRIDE_FRAMES = 10  # run detection every Nth window per device
 SHUTDOWN_JOIN_TIMEOUT_SECONDS = 3.0
 COLLECT_LABEL_CHOICES = ["empty", "standing", "sitting", "lying", "walking"]
@@ -89,6 +91,18 @@ class Pipeline(threading.Thread):
         self._collected_auxiliary = []
         self.frames_processed = 0
         self.windows_detected = 0
+        self._analytics = CsiAnalytics(
+            float(config["signal"].get("frame_rate_hz", 50.0)))
+        self._last_analytics_time = 0.0
+
+    def _maybe_publish_analytics(self):
+        """Refresh respiration / spectrogram / heatmap about once a second."""
+        now = time.time()
+        if now - self._last_analytics_time < ANALYTICS_PERIOD_SECONDS:
+            return
+        self._last_analytics_time = now
+        self._state.update_analytics(
+            self._analytics.compute(self._signal_processor.baselines()))
 
     def _detection_due(self, device_id):
         """Stride inference so CPU stays low at high frame rates."""
@@ -122,6 +136,12 @@ class Pipeline(threading.Thread):
             self._state.record_frame(csi_frame, sender_ip)
             self._logger.log_raw_frame(csi_frame)
             feature_window = self._signal_processor.add_frame(csi_frame)
+            self._analytics.ingest(
+                csi_frame.device_id,
+                self._signal_processor.last_band_vector_per_device[
+                    csi_frame.device_id],
+                csi_frame.esp32_timestamp_us / 1e6)
+            self._maybe_publish_analytics()
             if feature_window is None:
                 continue
             if self._detection_due(csi_frame.device_id):

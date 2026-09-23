@@ -17,7 +17,7 @@ dashboard:
   host: "127.0.0.1"
   port: 8050
   # Milliseconds between dashboard refreshes (200 ms = 5 updates/second).
-  update_interval_ms: 200
+  update_interval_ms: 400
   # Seconds of CSI history shown in the waveform panel.
   waveform_history_seconds: 5.0
   # Maximum entries kept in the event log panel.
