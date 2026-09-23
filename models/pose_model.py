@@ -18,7 +18,7 @@ from models.presence_model import (
 )
 
 POSE_CLASS_COUNT = 4  # standing, sitting, lying, walking
-HEAD_HIDDEN_SIZE = 32
+HEAD_HIDDEN_SIZE = 64
 
 
 class PoseModel(nn.Module):
@@ -31,6 +31,9 @@ class PoseModel(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(BACKBONE_EMBEDDING_SIZE + AUXILIARY_FEATURE_COUNT,
                       HEAD_HIDDEN_SIZE),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(HEAD_HIDDEN_SIZE, HEAD_HIDDEN_SIZE),
             nn.ReLU(),
             nn.Linear(HEAD_HIDDEN_SIZE, POSE_CLASS_COUNT),
         )

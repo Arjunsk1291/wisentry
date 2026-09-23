@@ -29,7 +29,10 @@ sys.path.insert(0, str(PROJECT_ROOT_DIRECTORY))
 
 from backend.csi_parser import CsiFrame  # noqa: E402
 from backend.ml_engine import POSE_CLASS_LABELS  # noqa: E402
-from backend.signal_processor import SignalProcessor  # noqa: E402
+from backend.signal_processor import (  # noqa: E402
+    SignalProcessor,
+    build_auxiliary_vector,
+)
 from simulation.simulator import (  # noqa: E402
     SUBCARRIER_COUNT,
     make_device_baseline,
@@ -41,13 +44,13 @@ from models.skeleton_model import SkeletonModel  # noqa: E402
 
 SAVED_DIRECTORY = PROJECT_ROOT_DIRECTORY / "saved"
 CLASS_LABELS = ["empty"] + POSE_CLASS_LABELS
-SEQUENCES_PER_CLASS = 60
+SEQUENCES_PER_CLASS = 100
 BASELINE_FRAMES_PER_SEQUENCE = 110   # establishes the empty-room baseline
 CLASS_FRAMES_PER_SEQUENCE = 130      # frames in the labeled segment
 WINDOW_STRIDE = 15                   # windows kept every N frames
 FRAME_INTERVAL_SECONDS = 0.02        # 50 Hz, matches config.yaml
 VALIDATION_FRACTION = 0.2
-TRAINING_EPOCHS = 25
+TRAINING_EPOCHS = 40
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-3
 DATASET_SEED = 11
@@ -75,6 +78,15 @@ def _frames_for_sequence(class_label, sequence_index, random_generator):
     breathing_phase_offset_seconds = random_generator.uniform(0.0, 10.0)
     occupied = class_label != "empty"
     pose_label = class_label if occupied else None
+    # Domain randomisation: every sequence is a different person / distance /
+    # room. +-20% shadow depth, +-20% width, 0.8-1.6x sensor noise. Without
+    # this the classes are separable by a fixed template and the synthetic
+    # score says nothing.
+    variation = {
+        "depth": random_generator.uniform(0.8, 1.2),
+        "width": random_generator.uniform(0.8, 1.2),
+        "noise": random_generator.uniform(0.8, 1.6),
+    }
     amplitude_frames = []
     total_frames = BASELINE_FRAMES_PER_SEQUENCE + CLASS_FRAMES_PER_SEQUENCE
     for frame_index in range(total_frames):
@@ -91,6 +103,7 @@ def _frames_for_sequence(class_label, sequence_index, random_generator):
             elapsed,
             current_dip,
             random_generator,
+            variation,
         )
         amplitude_frames.append(np.abs(csi_vector).astype(np.float32))
     return amplitude_frames, (dip_center / SUBCARRIER_COUNT) - 0.5
@@ -124,11 +137,7 @@ def _windows_from_sequence(amplitude_frames):
         if (window is not None and window_is_pure_class
                 and frame_index % WINDOW_STRIDE == 0):
             band_matrices.append(window.band_matrix)
-            auxiliary_rows.append([
-                window.motion_energy,
-                window.baseline_deviation,
-                window.breathing_energy,
-            ])
+            auxiliary_rows.append(build_auxiliary_vector(window).tolist())
     return band_matrices, auxiliary_rows
 
 
@@ -168,6 +177,7 @@ def generate_dataset():
     """
     random_generator = np.random.default_rng(DATASET_SEED)
     bands, auxiliary, presence, pose, skeleton = [], [], [], [], []
+    sequence_ids = []
     for class_index, class_label in enumerate(CLASS_LABELS):
         for sequence_index in range(SEQUENCES_PER_CLASS):
             frames, dip_offset = _frames_for_sequence(
@@ -179,6 +189,8 @@ def generate_dataset():
             if not band_matrices:
                 continue
             count = len(band_matrices)
+            sequence_ids.extend(
+                [class_index * SEQUENCES_PER_CLASS + sequence_index] * count)
             bands.extend(band_matrices)
             auxiliary.extend(auxiliary_rows)
             presence.extend([0.0 if class_label == "empty" else 1.0] * count)
@@ -199,14 +211,23 @@ def generate_dataset():
         "presence": torch.tensor(presence, dtype=torch.float32),
         "pose": torch.tensor(pose, dtype=torch.long),
         "skeleton": torch.from_numpy(np.concatenate(skeleton)).float(),
+        "sequence": np.array(sequence_ids),
     }
 
 
-def _split_indices(sample_count, random_generator):
-    """Shuffle indices and split train/validation."""
-    indices = random_generator.permutation(sample_count)
-    validation_size = int(sample_count * VALIDATION_FRACTION)
-    return indices[validation_size:], indices[:validation_size]
+def _split_indices(sequence_ids, random_generator):
+    """Split train/validation by whole sequence, never by window.
+
+    Windows from one sequence overlap heavily (stride 15, length 50), so a
+    per-window random split leaks near-duplicate windows into validation and
+    inflates accuracy. Holding out entire sequences (unseen device baseline,
+    dip position and breathing phase) gives an honest generalisation score.
+    """
+    unique_sequences = np.unique(sequence_ids)
+    shuffled = random_generator.permutation(unique_sequences)
+    held_out = set(shuffled[:int(len(shuffled) * VALIDATION_FRACTION)].tolist())
+    is_validation = np.array([s in held_out for s in sequence_ids])
+    return np.where(~is_validation)[0], np.where(is_validation)[0]
 
 
 def _train_model(model, inputs, targets, loss_function, epochs):
@@ -265,7 +286,7 @@ def train_and_evaluate():
     print(f"train_all: {sample_count} windows generated in "
           f"{time.time() - generation_start:.1f}s")
     train_idx, val_idx = _split_indices(
-        sample_count, np.random.default_rng(DATASET_SEED)
+        dataset["sequence"], np.random.default_rng(DATASET_SEED)
     )
     train_inputs = (dataset["band"][train_idx], dataset["aux"][train_idx])
     val_inputs = (dataset["band"][val_idx], dataset["aux"][val_idx])

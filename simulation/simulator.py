@@ -86,6 +86,7 @@ def synthesize_csi_vector(
     elapsed_seconds,
     dip_center_subcarrier,
     random_generator,
+    variation=None,
 ):
     """Generate one complex CSI vector for one device at one instant.
 
@@ -96,14 +97,22 @@ def synthesize_csi_vector(
         elapsed_seconds (float): Continuous time for breathing phase.
         dip_center_subcarrier (float): Center of the body-shadow dip.
         random_generator (np.random.Generator): Source of randomness.
+        variation (dict | None): Optional per-person/per-room multipliers
+            {"depth", "width", "noise"} for domain randomisation (body
+            size, distance to the link, room noise). None = nominal physics.
 
     Returns:
         np.ndarray: complex[64] CSI values ready for int8 quantisation.
     """
+    variation = variation or {}
     csi_vector = device_baseline.copy()
-    noise = random_generator.normal(0, SENSOR_NOISE_SIGMA, SUBCARRIER_COUNT)
+    noise = random_generator.normal(
+        0, SENSOR_NOISE_SIGMA * variation.get("noise", 1.0), SUBCARRIER_COUNT)
     if occupied and pose_label is not None:
-        signature = POSE_SIGNATURES[pose_label]
+        nominal = POSE_SIGNATURES[pose_label]
+        signature = dict(nominal)
+        signature["depth"] = nominal["depth"] * variation.get("depth", 1.0)
+        signature["width"] = nominal["width"] * variation.get("width", 1.0)
         subcarrier_indices = np.arange(SUBCARRIER_COUNT)
         dip_profile = signature["depth"] * np.exp(
             -((subcarrier_indices - dip_center_subcarrier) ** 2)

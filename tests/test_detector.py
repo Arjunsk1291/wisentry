@@ -117,3 +117,20 @@ def test_event_listeners_receive_events():
     for _ in range(4):
         detector.process_window(_window(motion=9.0, deviation=3.0))
     assert EVENT_KIND_ENTERED in captured
+
+
+def test_walking_gate_suppresses_walking_without_motion():
+    import numpy as np
+    from backend.detector import apply_walking_motion_gate
+    gated = apply_walking_motion_gate(np.array([0.2, 0.1, 0.0, 0.7]), 0.03)
+    assert gated[3] == 0.0
+    assert abs(gated.sum() - 1.0) < 1e-9
+    assert int(np.argmax(gated)) == 0
+
+
+def test_walking_gate_keeps_walking_with_motion():
+    import numpy as np
+    from backend.detector import apply_walking_motion_gate
+    probabilities = np.array([0.2, 0.1, 0.0, 0.7])
+    assert np.allclose(apply_walking_motion_gate(probabilities, 0.5),
+                       probabilities)

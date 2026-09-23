@@ -16,12 +16,14 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from backend.signal_processor import build_auxiliary_vector
+
 PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
 PRESENCE_WEIGHTS_FILENAME = "presence_model.pt"
 POSE_WEIGHTS_FILENAME = "pose_model.pt"
 SKELETON_WEIGHTS_FILENAME = "skeleton_model.pt"
 POSE_CLASS_LABELS = ["standing", "sitting", "lying", "walking"]
-AUXILIARY_FEATURE_COUNT = 3  # motion_energy, baseline_deviation, breathing
+AUXILIARY_FEATURE_COUNT = 21  # 3 scalars + 16-band attenuation profile + 2 shape stats
 
 
 @dataclass
@@ -48,19 +50,14 @@ def _feature_window_to_tensors(feature_window):
 
     Returns:
         tuple[torch.Tensor, torch.Tensor]: (band tensor [1,1,W,B],
-            auxiliary tensor [1,3]).
+            auxiliary tensor [1,21]).
     """
     band_tensor = torch.from_numpy(
         feature_window.band_matrix[np.newaxis, np.newaxis, :, :]
     ).float()
-    auxiliary_tensor = torch.tensor(
-        [[
-            feature_window.motion_energy,
-            feature_window.baseline_deviation,
-            feature_window.breathing_energy,
-        ]],
-        dtype=torch.float32,
-    )
+    auxiliary_tensor = torch.from_numpy(
+        build_auxiliary_vector(feature_window)[np.newaxis, :]
+    ).float()
     return band_tensor, auxiliary_tensor
 
 

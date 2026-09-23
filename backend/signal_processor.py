@@ -48,6 +48,12 @@ class FeatureWindow:
             breathes in the field.
         mean_amplitude (float): Window mean raw amplitude (device health).
         timestamp (float): Wall-clock time of the newest frame.
+        attenuation_profile (np.ndarray): float32[feature_bands] fractional
+            body-shadow attenuation per band relative to the empty-room
+            baseline (1 - current/baseline). Unlike the z-scored band
+            matrix it keeps the absolute depth and width of the shadow,
+            which is what separates standing from sitting. Zeros until the
+            baseline exists.
     """
 
     device_id: int
@@ -57,6 +63,7 @@ class FeatureWindow:
     breathing_energy: float
     mean_amplitude: float
     timestamp: float
+    attenuation_profile: np.ndarray = None
 
 
 def hampel_filter(amplitude_series, window_radius, sigma_threshold):
@@ -119,6 +126,56 @@ def average_into_bands(amplitude_array, band_count):
     usable_length = (len(amplitude_array) // band_count) * band_count
     reshaped = amplitude_array[:usable_length].reshape(band_count, -1)
     return reshaped.mean(axis=1).astype(np.float32)
+
+
+AUXILIARY_SCALAR_COUNT = 3
+SHAPE_DESCRIPTOR_COUNT = 2
+
+
+def attenuation_shape_descriptors(attenuation_profile):
+    """Summarise the body-shadow dip: peak depth and relative width.
+
+    Args:
+        attenuation_profile (np.ndarray): float[bands] from FeatureWindow.
+
+    Returns:
+        tuple[float, float]: (peak attenuation, fraction of bands at or
+            above half of the peak). Tall narrow shadow = standing; lower,
+            wider shadow = sitting; lowest, widest = lying.
+    """
+    profile = np.asarray(attenuation_profile, dtype=np.float64)
+    peak = float(profile.max()) if profile.size else 0.0
+    if peak <= 0.02:
+        return 0.0, 0.0
+    width_fraction = float((profile >= 0.5 * peak).mean())
+    return peak, width_fraction
+
+
+def build_auxiliary_vector(feature_window):
+    """Model auxiliary input: 3 scalars + attenuation profile + 2 shape stats.
+
+    Single source of truth for the auxiliary contract shared by training
+    (models/train_all.py) and runtime inference (backend/ml_engine.py).
+
+    Args:
+        feature_window (FeatureWindow): Output of SignalProcessor.add_frame.
+
+    Returns:
+        np.ndarray: float32[3 + feature_bands + 2].
+    """
+    profile = feature_window.attenuation_profile
+    if profile is None:
+        profile = np.zeros(feature_window.band_matrix.shape[1], np.float32)
+    peak, width_fraction = attenuation_shape_descriptors(profile)
+    return np.concatenate([
+        np.array([
+            np.log1p(max(feature_window.motion_energy, 0.0)),
+            feature_window.baseline_deviation,
+            feature_window.breathing_energy,
+        ], dtype=np.float32),
+        np.asarray(profile, dtype=np.float32) * 4.0,
+        np.array([peak * 4.0, width_fraction], dtype=np.float32),
+    ]).astype(np.float32)
 
 
 class SignalProcessor:
@@ -217,12 +274,18 @@ class SignalProcessor:
             np.var(np.diff(filtered_matrix, axis=0), axis=0).mean()
         )
         baseline_deviation = 0.0
+        attenuation_profile = np.zeros(self.feature_bands, dtype=np.float32)
         if device_id in self._baseline_per_device:
             baseline_mean, baseline_std = self._baseline_per_device[device_id]
             current_band_means = filtered_matrix.mean(axis=0)
             baseline_deviation = float(
                 (np.abs(current_band_means - baseline_mean) / baseline_std).mean()
             )
+            attenuation_profile = np.clip(
+                1.0 - current_band_means / np.maximum(baseline_mean,
+                                                      NUMERICAL_FLOOR),
+                -1.0, 1.0,
+            ).astype(np.float32)
         return FeatureWindow(
             device_id=device_id,
             band_matrix=zscored_matrix,
@@ -231,6 +294,7 @@ class SignalProcessor:
             breathing_energy=self._compute_breathing_energy(mean_history),
             mean_amplitude=float(raw_band_matrix.mean()),
             timestamp=time.time(),
+            attenuation_profile=attenuation_profile,
         )
 
     def add_frame(self, csi_frame):

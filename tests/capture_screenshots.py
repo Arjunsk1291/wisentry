@@ -12,6 +12,7 @@ docs/screenshots/. Exits 0 on success.
 Dependencies (dev-only, not in requirements.txt): playwright.
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -70,7 +71,8 @@ def main():
     )
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = playwright.chromium.launch(
+                executable_path=os.environ.get("CHROME_PATH") or None)
             page = browser.new_page(viewport=VIEWPORT)
             deadline = time.time() + APP_STARTUP_TIMEOUT_SECONDS
             while True:

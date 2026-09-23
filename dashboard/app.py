@@ -10,6 +10,7 @@ browser. Dependencies: dash, plotly, numpy.
 """
 
 import base64
+import math
 import time
 from datetime import datetime
 
@@ -18,12 +19,17 @@ from dash import Dash, Input, Output, dcc, html
 
 from backend.skeleton import POSE_TEMPLATES, SKELETON_BONES
 
-BACKGROUND_COLOR = "#111418"
-PANEL_COLOR = "#1b2026"
-TEXT_COLOR = "#e8e8e8"
+BACKGROUND_COLOR = "#05070d"
+PANEL_COLOR = "rgba(13, 20, 33, 0.82)"
+PLOT_COLOR = "#0a101b"
+TEXT_COLOR = "#dbe7f5"
+MUTED_TEXT = "#6b7a90"
 ACCENT_CYAN = "#22d3ee"
-OCCUPIED_GREEN = "#16a34a"
-EMPTY_RED = "#7f1d1d"
+ACCENT_VIOLET = "#a78bfa"
+OCCUPIED_GREEN = "#10b981"
+EMPTY_RED = "#ef4444"
+FONT_STACK = "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace"
+GRID_COLOR = "rgba(34, 211, 238, 0.08)"
 WARNING_YELLOW = "#eab308"
 EVENT_COLORS = {"entered": "#4ade80", "left": "#f87171",
                 "pose_change": "#facc15"}
@@ -32,9 +38,13 @@ SVG_HEIGHT = 240
 WAVEFORM_LINE_COLORS = ["#22d3ee", "#a78bfa", "#fb923c", "#4ade80",
                         "#f472b6", "#facc15"]
 PANEL_STYLE = {
-    "backgroundColor": PANEL_COLOR,
-    "borderRadius": "8px",
-    "padding": "12px",
+    "background": "linear-gradient(160deg, rgba(20, 30, 48, 0.9), "
+                  "rgba(8, 12, 22, 0.9))",
+    "border": "1px solid rgba(34, 211, 238, 0.22)",
+    "boxShadow": "0 0 18px rgba(34, 211, 238, 0.08), "
+                 "inset 0 0 24px rgba(34, 211, 238, 0.03)",
+    "borderRadius": "12px",
+    "padding": "14px",
     "margin": "6px",
     "flex": "1",
     "minWidth": "300px",
@@ -48,9 +58,11 @@ COVERAGE_ADVICE = {
 
 def _panel_title(title_text):
     """Uniform panel heading element."""
-    return html.H3(title_text, style={"marginTop": "0", "fontSize": "14px",
-                                      "color": ACCENT_CYAN,
-                                      "letterSpacing": "1px"})
+    return html.H3([html.Span("▍", style={"color": ACCENT_VIOLET}),
+                    title_text],
+                   style={"marginTop": "0", "fontSize": "12px",
+                          "color": ACCENT_CYAN, "letterSpacing": "3px",
+                          "fontWeight": "600"})
 
 
 def build_layout(simulation_mode, update_interval_ms):
@@ -67,19 +79,38 @@ def build_layout(simulation_mode, update_interval_ms):
     if simulation_mode:
         banner = html.Div(
             "⚠ SIMULATION MODE — no hardware connected",
-            style={"backgroundColor": "#7f1d1d", "color": "white",
-                   "textAlign": "center", "padding": "6px",
-                   "fontWeight": "bold"},
+            style={"background": "linear-gradient(90deg, rgba(239,68,68,0.0),"
+                                 " rgba(239,68,68,0.35), rgba(239,68,68,0.0))",
+                   "color": "#fecaca", "textAlign": "center",
+                   "padding": "6px", "letterSpacing": "2px",
+                   "fontSize": "12px", "fontWeight": "bold"},
         )
     return html.Div(
-        style={"backgroundColor": BACKGROUND_COLOR, "color": TEXT_COLOR,
-               "fontFamily": "Segoe UI, sans-serif", "minHeight": "100vh",
-               "padding": "8px"},
+        style={"backgroundColor": BACKGROUND_COLOR,
+               "backgroundImage":
+                   "radial-gradient(circle at 15% 0%, rgba(34,211,238,0.10), "
+                   "transparent 40%), radial-gradient(circle at 90% 10%, "
+                   "rgba(167,139,250,0.10), transparent 45%), "
+                   "linear-gradient(rgba(34,211,238,0.035) 1px, "
+                   "transparent 1px), linear-gradient(90deg, "
+                   "rgba(34,211,238,0.035) 1px, transparent 1px)",
+               "backgroundSize": "auto, auto, 32px 32px, 32px 32px",
+               "color": TEXT_COLOR, "fontFamily": FONT_STACK,
+               "minHeight": "100vh", "padding": "10px"},
         children=[
             dcc.Interval(id="refresh-tick", interval=update_interval_ms),
             banner,
-            html.H2("WiSentry — WiFi CSI Presence & Pose",
-                    style={"margin": "8px 6px"}),
+            html.Div(style={"display": "flex", "alignItems": "baseline",
+                            "gap": "14px", "margin": "8px 6px 4px"},
+                     children=[
+                html.H2("WISENTRY", style={
+                    "margin": "0", "letterSpacing": "6px",
+                    "color": ACCENT_CYAN,
+                    "textShadow": "0 0 12px rgba(34,211,238,0.6)"}),
+                html.Span("WiFi CSI presence & pose sensing",
+                          style={"color": MUTED_TEXT, "fontSize": "13px",
+                                 "letterSpacing": "1px"}),
+            ]),
             html.Div(id="panel-status-bar"),
             html.Div(style={"display": "flex", "flexWrap": "wrap"}, children=[
                 html.Div(style=PANEL_STYLE, children=[
@@ -88,7 +119,7 @@ def build_layout(simulation_mode, update_interval_ms):
                               config={"displayModeBar": False}),
                 ]),
                 html.Div(style=PANEL_STYLE, children=[
-                    _panel_title("POSE FIGURE (skeleton: experimental)"),
+                    _panel_title("POSE · 3D SKELETON (experimental)"),
                     html.Div(id="panel-pose-figure",
                              style={"textAlign": "center"}),
                 ]),
@@ -127,24 +158,35 @@ def render_status_bar(snapshot):
     confidence = snapshot["pose_confidence"] if occupied else 0.0
     online_count = _online_device_count(snapshot)
     confidence_bar = html.Div(style={
-        "backgroundColor": "#374151", "borderRadius": "4px",
-        "height": "10px", "width": "160px", "display": "inline-block",
-        "marginLeft": "8px",
+        "backgroundColor": "rgba(255,255,255,0.08)", "borderRadius": "6px",
+        "height": "8px", "width": "180px", "display": "inline-block",
+        "marginLeft": "10px", "verticalAlign": "middle",
     }, children=html.Div(style={
-        "backgroundColor": WARNING_YELLOW, "height": "10px",
-        "borderRadius": "4px", "width": f"{int(confidence * 100)}%",
+        "background": f"linear-gradient(90deg, {ACCENT_CYAN}, "
+                      f"{ACCENT_VIOLET})",
+        "boxShadow": "0 0 10px rgba(34,211,238,0.7)", "height": "8px",
+        "borderRadius": "6px", "width": f"{int(confidence * 100)}%",
     }))
     return html.Div(
-        style={"display": "flex", "alignItems": "center", "gap": "24px",
-               "backgroundColor": status_color, "borderRadius": "8px",
-               "padding": "14px", "margin": "6px"},
+        style={"display": "flex", "alignItems": "center", "gap": "28px",
+               "background": "linear-gradient(90deg, rgba(10,16,28,0.95), "
+                             "rgba(14,22,38,0.85))",
+               "border": f"1px solid {status_color}",
+               "boxShadow": f"0 0 22px {status_color}55",
+               "borderRadius": "12px", "padding": "14px 18px",
+               "margin": "6px"},
         children=[
-            html.Span(status_text,
-                      style={"fontSize": "26px", "fontWeight": "bold"}),
+            html.Span([html.Span("●", style={
+                           "color": status_color, "marginRight": "10px",
+                           "textShadow": f"0 0 10px {status_color}"}),
+                       status_text],
+                      style={"fontSize": "26px", "fontWeight": "bold",
+                             "letterSpacing": "4px"}),
             html.Span([f"Pose: {pose_text} "
                        f"({confidence:.0%} confidence)", confidence_bar]),
-            html.Span(f"ESP32 online: {online_count}",
-                      style={"marginLeft": "auto", "fontSize": "16px"}),
+            html.Span(f"ESP32 ONLINE · {online_count}",
+                      style={"marginLeft": "auto", "fontSize": "14px",
+                             "letterSpacing": "2px", "color": ACCENT_CYAN}),
         ],
     )
 
@@ -164,8 +206,8 @@ def render_waveform(snapshot, history_seconds):
                 plot_index % len(WAVEFORM_LINE_COLORS)], "width": 1.5},
         ))
     figure.update_layout(
-        template="plotly_dark", paper_bgcolor=PANEL_COLOR,
-        plot_bgcolor=PANEL_COLOR, height=240,
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PLOT_COLOR, font={"family": FONT_STACK, "size": 11}, height=240,
         margin={"l": 40, "r": 10, "t": 10, "b": 30},
         xaxis_title="seconds ago", yaxis_title="mean amplitude",
         xaxis_range=[-history_seconds, 0], showlegend=True,
@@ -203,16 +245,143 @@ def _keypoints_to_svg(keypoints, pose_label):
     return f"data:image/svg+xml;base64,{encoded}"
 
 
+# COCO-17 index groups used by the 3D lift.
+_LEFT_ARM = (7, 9)
+_RIGHT_ARM = (8, 10)
+_LEFT_LEG = (13, 15)
+_RIGHT_LEG = (14, 16)
+
+
+def lift_keypoints_3d(keypoints, pose_label):
+    """Lift normalised 2D keypoints into a plausible 3D body for display.
+
+    The model outputs 2D image-plane keypoints only; depth here is a
+    pose-conditioned display heuristic (not an estimate), used so the
+    figure reads as a body in a room rather than a flat drawing.
+
+    Args:
+        keypoints (sequence): 17 (x, y) pairs in [0, 1], y pointing down.
+        pose_label (str): standing | sitting | lying | walking.
+
+    Returns:
+        tuple[list, list, list]: x (lateral), y (depth), z (height) in
+        metres-like units for a ~1.75 m figure.
+    """
+    height_scale = 1.75
+    lateral, depth, up = [], [], []
+    for index, (x_norm, y_norm) in enumerate(keypoints):
+        x_norm, y_norm = float(x_norm), float(y_norm)
+        if pose_label == "lying":
+            # Template is a top-down view: x runs along the body and y
+            # spreads left/right, so map y to depth and lay it on a bed.
+            lateral.append((x_norm - 0.5) * height_scale)
+            depth.append((y_norm - 0.75) * height_scale)
+            up.append(0.45 + (0.06 if index <= 4 else 0.0))
+            continue
+        lx = (x_norm - 0.5) * height_scale
+        lz = (1.0 - y_norm) * height_scale
+        ly = 0.0
+        if pose_label == "sitting" and index in (13, 14, 15, 16):
+            hip_x = float(keypoints[11 if index % 2 else 12][0])
+            lx = (hip_x - 0.5) * height_scale
+            ly = 0.45 if index in (13, 14) else 0.5
+        if pose_label == "walking":
+            if index in _LEFT_LEG or index in _RIGHT_ARM:
+                ly = 0.18 if index in (13, 15) else -0.14
+            elif index in _RIGHT_LEG or index in _LEFT_ARM:
+                ly = -0.18 if index in (14, 16) else 0.14
+        if index <= 4:
+            ly += 0.03
+        lateral.append(lx)
+        depth.append(ly)
+        up.append(lz)
+    return lateral, depth, up
+
+
+def render_pose_3d(keypoints, pose_label, confidence=None):
+    """Build the 3D skeleton figure: glowing bones, joints, head, floor."""
+    xs, ys, zs = lift_keypoints_3d(keypoints, pose_label)
+    figure = go.Figure()
+    # Floor grid and a soft shadow ring under the body.
+    grid = [i * 0.2 for i in range(-5, 6)]
+    for g in grid:
+        figure.add_trace(go.Scatter3d(
+            x=[g, g], y=[-1.0, 1.0], z=[0, 0], mode="lines",
+            line={"color": "#0f3b47", "width": 1},
+            hoverinfo="skip", showlegend=False))
+        figure.add_trace(go.Scatter3d(
+            x=[-1.0, 1.0], y=[g, g], z=[0, 0], mode="lines",
+            line={"color": "#0f3b47", "width": 1},
+            hoverinfo="skip", showlegend=False))
+    center_x = (xs[11] + xs[12]) / 2
+    center_y = (ys[11] + ys[12]) / 2
+    ring = [i * 2 * math.pi / 40 for i in range(41)]
+    figure.add_trace(go.Scatter3d(
+        x=[center_x + 0.35 * math.cos(a) for a in ring],
+        y=[center_y + 0.35 * math.sin(a) for a in ring],
+        z=[0.0] * len(ring), mode="lines",
+        line={"color": "#6d5bd0", "width": 4},
+        hoverinfo="skip", showlegend=False))
+    # Bones: wide translucent glow pass, then a bright core pass.
+    for width, color in ((18, "#0e4f5c"),
+                         (7, ACCENT_CYAN)):
+        bx, by, bz = [], [], []
+        for a, b in SKELETON_BONES:
+            bx += [xs[a], xs[b], None]
+            by += [ys[a], ys[b], None]
+            bz += [zs[a], zs[b], None]
+        figure.add_trace(go.Scatter3d(
+            x=bx, y=by, z=bz, mode="lines",
+            line={"color": color, "width": width},
+            hoverinfo="skip", showlegend=False))
+    body_joints = list(range(5, 17))
+    figure.add_trace(go.Scatter3d(
+        x=[xs[i] for i in body_joints], y=[ys[i] for i in body_joints],
+        z=[zs[i] for i in body_joints], mode="markers",
+        marker={"size": 5, "color": ACCENT_VIOLET,
+                "line": {"color": "#ffffff", "width": 1}},
+        hoverinfo="skip", showlegend=False))
+    figure.add_trace(go.Scatter3d(
+        x=[xs[0]], y=[ys[0]], z=[zs[0] + 0.05], mode="markers",
+        marker={"size": 16, "color": "#0b6b7a",
+                "line": {"color": ACCENT_CYAN, "width": 3}},
+        hoverinfo="skip", showlegend=False))
+    axis = {"visible": False, "showbackground": False}
+    title = pose_label.upper()
+    if confidence is not None:
+        title += f"  ·  {confidence:.0%}"
+    figure.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        height=260, margin={"l": 0, "r": 0, "t": 24, "b": 0},
+        font={"family": FONT_STACK, "size": 11},
+        title={"text": title, "x": 0.5, "y": 0.97,
+               "font": {"color": TEXT_COLOR, "size": 12}},
+        scene={"xaxis": {**axis, "range": [-1.1, 1.1]},
+               "yaxis": {**axis, "range": [-1.1, 1.1]},
+               "zaxis": {**axis, "range": [0, 1.95]},
+               "aspectmode": "manual",
+               "aspectratio": {"x": 1, "y": 1, "z": 0.78},
+               "camera": {"eye": {"x": 0.55, "y": -1.05, "z": 0.35},
+                          "center": {"x": 0, "y": 0, "z": -0.05}}},
+    )
+    return figure
+
+
 def render_pose_figure(snapshot):
-    """PANEL 3 — stick figure for the current pose, keypoint dots overlaid."""
+    """PANEL 3 — 3D skeleton for the current pose (keypoints lifted)."""
     pose_label = snapshot["pose_label"]
     if not snapshot["presence"] or pose_label is None:
         return html.Div("no person detected",
-                        style={"padding": "60px 0", "color": "#6b7280"})
+                        style={"padding": "100px 0", "color": MUTED_TEXT,
+                               "letterSpacing": "2px"})
     keypoints = snapshot["keypoints"]
     if keypoints is None:
         keypoints = POSE_TEMPLATES[pose_label]
-    return html.Img(src=_keypoints_to_svg(keypoints, pose_label))
+    return dcc.Graph(
+        figure=render_pose_3d(keypoints, pose_label,
+                              snapshot.get("pose_confidence")),
+        config={"displayModeBar": False},
+        style={"height": "260px"})
 
 
 def render_room_map(snapshot, room_config):
@@ -236,8 +405,8 @@ def render_room_map(snapshot, room_config):
             marker={"color": "#fb923c", "size": 20},
         ))
     figure.update_layout(
-        template="plotly_dark", paper_bgcolor=PANEL_COLOR,
-        plot_bgcolor="#10141a", height=240,
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PLOT_COLOR, font={"family": FONT_STACK, "size": 11}, height=240,
         margin={"l": 30, "r": 10, "t": 10, "b": 30},
         xaxis={"range": [-0.3, width + 0.3], "title": "meters"},
         yaxis={"range": [depth + 0.3, -0.3], "scaleanchor": "x"},
@@ -256,7 +425,7 @@ def render_event_log(snapshot):
             style={"color": EVENT_COLORS.get(kind, TEXT_COLOR),
                    "padding": "2px 0"},
         ))
-    return rows or html.Div("no events yet", style={"color": "#6b7280"})
+    return rows or html.Div("no events yet", style={"color": MUTED_TEXT})
 
 
 def _online_device_count(snapshot, timeout_seconds=2.0):
@@ -278,10 +447,10 @@ def render_coverage(snapshot):
         html.Div(f"{online_count} receiver(s) online → {headline}",
                  style={"fontSize": "16px", "fontWeight": "bold",
                         "marginBottom": "8px"}),
-        html.Div(advice, style={"color": "#9ca3af"}),
+        html.Div(advice, style={"color": MUTED_TEXT}),
         html.Div(f"frames processed: {snapshot['frames_processed']:,}",
                  style={"marginTop": "12px", "fontSize": "12px",
-                        "color": "#6b7280"}),
+                        "color": MUTED_TEXT}),
     ])
 
 
@@ -305,7 +474,7 @@ def render_device_table(snapshot, timeout_seconds=2.0):
             status_cell,
         ]))
     if not body_rows:
-        return html.Div("no devices seen yet", style={"color": "#6b7280"})
+        return html.Div("no devices seen yet", style={"color": MUTED_TEXT})
     return html.Table([header] + body_rows, style={"width": "100%",
                                                    "fontSize": "13px"})
 

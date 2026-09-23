@@ -35,6 +35,10 @@ RULE_WALKING_MOTION_FACTOR = 4.0     # motion >= factor*threshold => walking
 RULE_BREATHING_PRESENCE_BONUS = 0.35  # breathing evidence lowers the bar
 POSITION_SMOOTHING_ALPHA = 0.2       # EMA for the room-map position dot
 POSE_PROBABILITY_EMA_ALPHA = 0.3     # temporal smoothing of pose votes
+# Physics gate: walking needs body motion. When every receiver reports
+# near-zero motion energy, a "walking" vote is a classifier error (seen in
+# end-to-end runs: a still person after walking in was held as walking).
+WALKING_MIN_MOTION_ENERGY = 0.12
 
 
 class SystemState:
@@ -144,6 +148,27 @@ class SystemState:
             }
 
 
+def apply_walking_motion_gate(pose_probabilities, motion_energy):
+    """Suppress the walking class when no receiver sees body motion.
+
+    Args:
+        pose_probabilities (np.ndarray): float[4] in POSE_CLASS_LABELS order.
+        motion_energy (float): Highest recent motion energy across devices.
+
+    Returns:
+        np.ndarray: Renormalised probabilities (unchanged if motion present).
+    """
+    probabilities = np.asarray(pose_probabilities, dtype=np.float64).copy()
+    if motion_energy >= WALKING_MIN_MOTION_ENERGY:
+        return probabilities
+    walking_index = POSE_CLASS_LABELS.index("walking")
+    probabilities[walking_index] = 0.0
+    total = probabilities.sum()
+    if total <= 1e-9:
+        return np.asarray(pose_probabilities, dtype=np.float64)
+    return probabilities / total
+
+
 class PresencePoseDetector:
     """Debounced presence + pose state machine with rule-based fallback."""
 
@@ -180,6 +205,8 @@ class PresencePoseDetector:
         self._smoothed_position = None
         self._last_deviation_per_device = {}
         self._last_pose_probabilities_per_device = {}
+        self._last_motion_per_device = {}
+        self._last_presence_per_device = {}
         self._pose_probability_ema = None
 
     def _rule_based_scores(self, feature_window):
@@ -324,7 +351,14 @@ class PresencePoseDetector:
                 feature_window
             )
             skeleton_offsets = None
-        self._update_presence(presence_probability)
+        # Fuse presence across receivers (median of each device's latest
+        # probability) so one receiver with a biased model cannot hold the
+        # room "occupied" forever by breaking the off-vote streak.
+        self._last_presence_per_device[feature_window.device_id] = float(
+            presence_probability)
+        fused_presence_probability = float(np.median(
+            list(self._last_presence_per_device.values())))
+        self._update_presence(fused_presence_probability)
         # Pose votes from different receivers can disagree window-to-window;
         # average the latest probabilities across devices so one flaky
         # receiver cannot flip the reported pose.
@@ -333,6 +367,13 @@ class PresencePoseDetector:
         )
         fused_pose_probabilities = np.mean(
             list(self._last_pose_probabilities_per_device.values()), axis=0
+        )
+        self._last_motion_per_device[feature_window.device_id] = (
+            feature_window.motion_energy
+        )
+        fused_pose_probabilities = apply_walking_motion_gate(
+            fused_pose_probabilities,
+            max(self._last_motion_per_device.values()),
         )
         # Temporal EMA on top of device fusion: breathing-induced classifier
         # wobble is faster than real pose changes, so smooth it out.
@@ -357,7 +398,8 @@ class PresencePoseDetector:
         self._state.update_detection(
             presence=self._presence,
             presence_confidence=(
-                presence_probability if self._presence else 1 - presence_probability
+                fused_presence_probability if self._presence
+                else 1 - fused_presence_probability
             ),
             pose_label=self._current_pose,
             pose_confidence=pose_confidence,

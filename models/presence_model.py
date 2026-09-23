@@ -17,7 +17,7 @@ import torch.nn as nn
 
 WINDOW_FRAMES = 50
 FEATURE_BANDS = 16
-AUXILIARY_FEATURE_COUNT = 3
+AUXILIARY_FEATURE_COUNT = 21  # see backend.signal_processor.build_auxiliary_vector
 CONV1_CHANNELS = 8
 CONV2_CHANNELS = 16
 CONV_KERNEL_SIZE = 3
