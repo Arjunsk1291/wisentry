@@ -34,6 +34,9 @@ SPECTROGRAM_SEGMENT = 64
 SPECTROGRAM_OVERLAP = 56
 SPECTROGRAM_MAX_HZ = 10.0
 HEATMAP_SECONDS = 5.0
+# CARM speed-profile bands. With ~6 cm path change per cycle at 2.4 GHz,
+# f Hz of CSI power oscillation ~ 0.06*f m/s of path-length change.
+SPEED_PROFILE_BANDS_HZ = [(0.0, 1.0), (1.0, 2.5), (2.5, 5.0), (5.0, 10.0)]
 HEATMAP_COLUMNS = 50
 
 
@@ -154,7 +157,13 @@ def motion_spectrogram(band_matrix, frame_rate_hz):
     total = power.sum()
     speed_index = float((freqs[:, None] * power).sum() / total) if total > 0 \
         else 0.0
+    band_edges = SPEED_PROFILE_BANDS_HZ
+    band_energy = [float(power[(freqs > lo) & (freqs <= hi)].sum())
+                   for lo, hi in band_edges]
+    energy_total = sum(band_energy) or 1.0
+    speed_profile = [round(e / energy_total, 3) for e in band_energy]
     return {"freqs": freqs.tolist(), "times": (times - times[-1]).tolist(),
+            "speed_profile": speed_profile,
             "power": np.log10(power + 1e-6).tolist(),
             "speed_index": speed_index}
 
@@ -225,12 +234,20 @@ class CsiAnalytics:
         """
         per_device_breathing = {}
         link_activity = {}
+        link_stats = {}
         best_spectrogram, best_speed = None, -1.0
         heatmap = None
         for device_id in sorted(self._history):
             matrix = self._uniform_matrix(device_id)
             recent = matrix[-int(self.frame_rate_hz):]
             link_activity[device_id] = float(recent.mean(axis=1).std())
+            stamps = np.asarray(self._timestamps[device_id])
+            if len(stamps) > 10:
+                gaps = np.diff(stamps[-int(5 * self.frame_rate_hz):])
+                link_stats[device_id] = {
+                    "rate_hz": round(float(1.0 / max(gaps.mean(), 1e-6)), 1),
+                    "jitter_ms": round(float(gaps.std() * 1000), 1),
+                    "loss_pct": round(float(max(0.0, 1 - (1 / self.frame_rate_hz) / max(gaps.mean(), 1e-6)) * 100), 1)}
             breathing = estimate_breathing(matrix, self.frame_rate_hz)
             if breathing is not None:
                 per_device_breathing[device_id] = breathing
@@ -266,7 +283,8 @@ class CsiAnalytics:
                     for d, b in per_device_breathing.items()},
                 "spectrogram": best_spectrogram,
                 "heatmap": heatmap,
-                "link_activity": link_activity}
+                "link_activity": link_activity,
+                "link_stats": link_stats}
 
     def _heatmap(self, device_id, matrix, baselines):
         """Attenuation per band over the last few seconds (one receiver)."""

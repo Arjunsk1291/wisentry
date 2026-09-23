@@ -21,7 +21,7 @@ PANEL_IDS = [
     "panel-status-bar", "panel-waveform", "panel-pose-figure",
     "panel-room-map", "panel-event-log", "panel-coverage",
     "panel-device-table", "panel-vitals", "panel-spectrogram",
-    "panel-heatmap",
+    "panel-heatmap", "panel-signal-intel",
 ]
 CALLBACK_PAYLOAD = {
     "output": (
@@ -29,7 +29,8 @@ CALLBACK_PAYLOAD = {
         "panel-pose-figure.children...panel-room-map.figure..."
         "panel-event-log.children...panel-coverage.children..."
         "panel-device-table.children...panel-vitals.children..."
-        "panel-spectrogram.figure...panel-heatmap.figure.."
+        "panel-spectrogram.figure...panel-heatmap.figure..."
+        "panel-signal-intel.children.."
     ),
     "outputs": [
         {"id": "panel-status-bar", "property": "children"},
@@ -42,6 +43,7 @@ CALLBACK_PAYLOAD = {
         {"id": "panel-vitals", "property": "children"},
         {"id": "panel-spectrogram", "property": "figure"},
         {"id": "panel-heatmap", "property": "figure"},
+        {"id": "panel-signal-intel", "property": "children"},
     ],
     "inputs": [{"id": "refresh-tick", "property": "n_intervals", "value": 1}],
     "changedPropIds": ["refresh-tick.n_intervals"],

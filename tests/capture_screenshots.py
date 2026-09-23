@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCREENSHOT_DIRECTORY = PROJECT_ROOT / "docs" / "screenshots"
 DASHBOARD_URL = "http://127.0.0.1:8050"
 VIEWPORT = {"width": 1500, "height": 1150}
-CONTENT_HEIGHT_PX = 1060  # panels end here; crop the empty page below
+CONTENT_HEIGHT_PX = 1100  # panels end here; crop the empty page below
 APP_STARTUP_TIMEOUT_SECONDS = 40
 SCENARIO_WAIT_TIMEOUT_SECONDS = 70
 # Captures: filename -> (status substring, pose substring or None)

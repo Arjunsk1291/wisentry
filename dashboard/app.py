@@ -11,6 +11,8 @@ browser. Dependencies: dash, plotly, numpy.
 
 import base64
 import math
+
+import numpy as np
 import time
 from datetime import datetime
 
@@ -18,6 +20,7 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, dcc, html
 
 from backend.skeleton import POSE_TEMPLATES, SKELETON_BONES
+from dashboard.body_mesh import body_mesh_trace, ellipsoid_trace
 
 BACKGROUND_COLOR = "#05070d"
 PANEL_COLOR = "rgba(13, 20, 33, 0.82)"
@@ -30,6 +33,9 @@ OCCUPIED_GREEN = "#10b981"
 EMPTY_RED = "#ef4444"
 FONT_STACK = "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace"
 GRID_COLOR = "rgba(34, 211, 238, 0.08)"
+HOLOGRAM_COLORSCALE = [[0.0, "#0b3d91"], [0.5, "#22d3ee"], [1.0, "#c4b5fd"]]
+PERSON_COLORSCALE = [[0.0, "#7c2d12"], [0.5, "#fb923c"], [1.0, "#fde68a"]]
+WAVELENGTH_METERS = 0.125  # 2.4 GHz WiFi
 WARNING_YELLOW = "#eab308"
 EVENT_COLORS = {"entered": "#4ade80", "left": "#f87171",
                 "pose_change": "#facc15"}
@@ -153,8 +159,10 @@ def build_layout(simulation_mode, update_interval_ms):
                                     "fontSize": "13px"}),
                 ]),
                 html.Div(style=PANEL_STYLE, children=[
-                    _panel_title("COVERAGE ADVISOR"),
-                    html.Div(id="panel-coverage"),
+                    _panel_title("SIGNAL INTELLIGENCE"),
+                    html.Div(id="panel-signal-intel"),
+                    html.Div(id="panel-coverage",
+                             style={"marginTop": "10px"}),
                 ]),
                 html.Div(style=PANEL_STYLE, children=[
                     _panel_title("DEVICE TABLE"),
@@ -349,30 +357,54 @@ def render_pose_3d(keypoints, pose_label, confidence=None):
         z=[0.0] * len(ring), mode="lines",
         line={"color": "#6d5bd0", "width": 4},
         hoverinfo="skip", showlegend=False))
-    # Bones: wide translucent glow pass, then a bright core pass.
-    for width, color in ((18, "#0e4f5c"),
-                         (7, ACCENT_CYAN)):
-        bx, by, bz = [], [], []
-        for a, b in SKELETON_BONES:
-            bx += [xs[a], xs[b], None]
-            by += [ys[a], ys[b], None]
-            bz += [zs[a], zs[b], None]
+    # Holographic scan rings around the body at a few heights.
+    top = max(zs)
+    for level in (() if pose_label == "lying" else (0.25, 0.5, 0.75)):
+        height = top * level
         figure.add_trace(go.Scatter3d(
-            x=bx, y=by, z=bz, mode="lines",
-            line={"color": color, "width": width},
+            x=[center_x + 0.42 * math.cos(a) for a in ring],
+            y=[center_y + 0.42 * math.sin(a) for a in ring],
+            z=[height] * len(ring), mode="lines",
+            line={"color": "rgba(34,211,238,0.35)", "width": 2},
             hoverinfo="skip", showlegend=False))
-    body_joints = list(range(5, 17))
+    # Floor shadow: the skeleton projected onto z=0.
+    sx, sy, sz = [], [], []
+    for a, b in ([] if pose_label == "lying" else SKELETON_BONES):
+        sx += [xs[a], xs[b], None]
+        sy += [ys[a], ys[b], None]
+        sz += [0.002, 0.002, None]
     figure.add_trace(go.Scatter3d(
-        x=[xs[i] for i in body_joints], y=[ys[i] for i in body_joints],
-        z=[zs[i] for i in body_joints], mode="markers",
-        marker={"size": 5, "color": ACCENT_VIOLET,
+        x=sx, y=sy, z=sz, mode="lines",
+        line={"color": "rgba(109,91,208,0.3)", "width": 5},
+        hoverinfo="skip", showlegend=False))
+    # Solid body (volumetric capsules + torso + head), then the tracked
+    # keypoint skeleton drawn on top as a thin wire with joint markers.
+    figure.add_trace(body_mesh_trace(xs, ys, zs, HOLOGRAM_COLORSCALE,
+                                     opacity=0.55))
+    bx, by, bz = [], [], []
+    for a, b in SKELETON_BONES:
+        if a == 0:
+            continue  # neck approximation runs through the head mesh
+        bx += [xs[a], xs[b], None]
+        by += [ys[a], ys[b], None]
+        bz += [zs[a], zs[b], None]
+    figure.add_trace(go.Scatter3d(
+        x=bx, y=by, z=bz, mode="lines",
+        line={"color": "#e0fbff", "width": 3},
+        hoverinfo="skip", showlegend=False))
+    figure.add_trace(go.Scatter3d(
+        x=xs[5:], y=ys[5:], z=zs[5:], mode="markers",
+        marker={"size": 3.5, "color": "#fde68a",
                 "line": {"color": "#ffffff", "width": 1}},
         hoverinfo="skip", showlegend=False))
+    # Keypoint callouts: head and hip height (lifted display values).
+    hip_height = (zs[11] + zs[12]) / 2
     figure.add_trace(go.Scatter3d(
-        x=[xs[0]], y=[ys[0]], z=[zs[0] + 0.05], mode="markers",
-        marker={"size": 16, "color": "#0b6b7a",
-                "line": {"color": ACCENT_CYAN, "width": 3}},
-        hoverinfo="skip", showlegend=False))
+        x=[xs[0] + 0.45, center_x + 0.62], y=[ys[0], center_y],
+        z=[zs[0] + 0.05, hip_height], mode="text",
+        text=[f"head {zs[0]:.2f} m", f"hip {hip_height:.2f} m"],
+        textfont={"color": "#9fb3c8", "size": 9}, hoverinfo="skip",
+        showlegend=False))
     axis = {"visible": False, "showbackground": False}
     title = pose_label.upper()
     if confidence is not None:
@@ -389,7 +421,7 @@ def render_pose_3d(keypoints, pose_label, confidence=None):
                "zaxis": {**axis, "range": [0, 1.95]},
                "aspectmode": "manual",
                "aspectratio": {"x": 1, "y": 1, "z": 0.78},
-               "camera": {"eye": {"x": 0.55, "y": -1.05, "z": 0.35},
+               "camera": {"eye": {"x": 0.5, "y": -0.95, "z": 0.3},
                           "center": {"x": 0, "y": 0, "z": -0.05}}},
     )
     return figure
@@ -431,6 +463,45 @@ def _room_wireframe(width, depth, height):
     return xs, ys, zs
 
 
+def _fresnel_zone_trace(transmitter, receiver):
+    """First Fresnel zone of a TX→RX link as a translucent ellipsoid.
+
+    The Fresnel-zone model (used for WiFi sensing by Wu, Zhang et al.)
+    says a body inside this ellipsoid perturbs the link most; its
+    half-width at mid-link is sqrt(λ·d)/2 for link length d.
+    """
+    start = np.array([transmitter["x"], transmitter["y"],
+                      DEVICE_HEIGHT_METERS])
+    end = np.array([receiver["x"], receiver["y"], DEVICE_HEIGHT_METERS])
+    link = end - start
+    length = float(np.linalg.norm(link))
+    half_width = 0.5 * math.sqrt(WAVELENGTH_METERS * length)
+    axis = link / max(length, 1e-9)
+    side = np.cross(axis, [0.0, 0.0, 1.0])
+    side = side / max(np.linalg.norm(side), 1e-9)
+    up = np.cross(side, axis)
+    rotation = np.column_stack([side, up, axis])
+    return ellipsoid_trace((start + end) / 2,
+                           (half_width, half_width, length / 2),
+                           rotation, "#22d3ee", 0.08)
+
+
+def _device_box_trace(position, size=0.12):
+    """Small solid box for an ESP32 node."""
+    x0, y0 = position["x"] - size / 2, position["y"] - size / 2
+    z0 = DEVICE_HEIGHT_METERS - size / 2
+    xs = [x0, x0 + size, x0 + size, x0] * 2
+    ys = [y0, y0, y0 + size, y0 + size] * 2
+    zs = [z0] * 4 + [z0 + size] * 4
+    faces = [(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7), (0, 1, 5),
+             (0, 5, 4), (1, 2, 6), (1, 6, 5), (2, 3, 7), (2, 7, 6),
+             (3, 0, 4), (3, 4, 7)]
+    return go.Mesh3d(x=xs, y=ys, z=zs, i=[f[0] for f in faces],
+                     j=[f[1] for f in faces], k=[f[2] for f in faces],
+                     color="#22d3ee", opacity=0.9, hoverinfo="skip",
+                     lighting={"ambient": 0.6, "specular": 0.8})
+
+
 def render_room_map(snapshot, room_config):
     """PANEL 4 — 3D room: walls, receivers, live TX→RX links, person."""
     width = float(room_config["width_meters"])
@@ -466,13 +537,37 @@ def render_room_map(snapshot, room_config):
                 z=[DEVICE_HEIGHT_METERS] * 2, mode="lines",
                 line={"color": color, "width": 3 + 9 * glow},
                 hoverinfo="skip", showlegend=False))
+    if transmitter is not None:
+        for key, position in positions.items():
+            if position is transmitter:
+                continue
+            figure.add_trace(_fresnel_zone_trace(transmitter, position))
+    # Translucent back walls give the room scale; floor edge tick labels.
+    for wall_x, wall_y in (([0, width, width, 0], [depth] * 4),
+                           ([0, 0, 0, 0], [0, 0, depth, depth])):
+        figure.add_trace(go.Mesh3d(
+            x=wall_x, y=wall_y, z=[0, 0, ROOM_HEIGHT_METERS,
+                                   ROOM_HEIGHT_METERS],
+            i=[0, 0], j=[1, 2], k=[2, 3], color="#0e7490", opacity=0.07,
+            hoverinfo="skip"))
+    ticks_x = [float(v) for v in range(int(width) + 1)]
+    ticks_y = [float(v) for v in range(int(depth) + 1)]
+    figure.add_trace(go.Scatter3d(
+        x=ticks_x + [-0.25] * len(ticks_y),
+        y=[-0.25] * len(ticks_x) + ticks_y, z=[0] * (len(ticks_x) +
+                                                   len(ticks_y)),
+        mode="text", text=[f"{v:.0f}m" for v in ticks_x + ticks_y],
+        textfont={"color": MUTED_TEXT, "size": 9}, hoverinfo="skip",
+        showlegend=False))
+    for position in positions.values():
+        figure.add_trace(_device_box_trace(position))
     figure.add_trace(go.Scatter3d(
         x=[p["x"] for p in positions.values()],
         y=[p["y"] for p in positions.values()],
         z=[DEVICE_HEIGHT_METERS] * len(positions),
         mode="markers+text", text=[p["label"] for p in positions.values()],
         textposition="top center", textfont={"color": TEXT_COLOR, "size": 10},
-        marker={"color": ACCENT_CYAN, "size": 6, "symbol": "square"},
+        marker={"color": ACCENT_CYAN, "size": 2, "symbol": "square"},
         hoverinfo="skip", showlegend=False))
     person = snapshot["position_estimate"]
     pose_label = snapshot["pose_label"]
@@ -482,18 +577,15 @@ def render_room_map(snapshot, room_config):
             keypoints = POSE_TEMPLATES[pose_label]
         xs, ys, zs = lift_keypoints_3d(keypoints, pose_label)
         px, py = float(person[0]), float(person[1])
-        bx, by, bz = [], [], []
-        for a, b in SKELETON_BONES:
-            bx += [px + xs[a], px + xs[b], None]
-            by += [py + ys[a], py + ys[b], None]
-            bz += [zs[a], zs[b], None]
+        figure.add_trace(body_mesh_trace(xs, ys, zs, PERSON_COLORSCALE,
+                                         offset=(px, py), opacity=0.95))
+        # Position uncertainty halo on the floor (display radius).
+        halo = [i * 2 * math.pi / 40 for i in range(41)]
         figure.add_trace(go.Scatter3d(
-            x=bx, y=by, z=bz, mode="lines",
-            line={"color": "#fb923c", "width": 6}, hoverinfo="skip",
-            showlegend=False))
-        figure.add_trace(go.Scatter3d(
-            x=[px + xs[0]], y=[py + ys[0]], z=[zs[0] + 0.05],
-            mode="markers", marker={"size": 8, "color": "#fb923c"},
+            x=[px + 0.45 * math.cos(a) for a in halo],
+            y=[py + 0.45 * math.sin(a) for a in halo],
+            z=[0.01] * len(halo), mode="lines",
+            line={"color": "rgba(251,146,60,0.7)", "width": 4},
             hoverinfo="skip", showlegend=False))
         figure.add_trace(go.Scatter3d(
             x=[px], y=[py], z=[0.0], mode="markers+text",
@@ -503,7 +595,7 @@ def render_room_map(snapshot, room_config):
             hoverinfo="skip", showlegend=False))
     axis = {"visible": False, "showbackground": False}
     figure.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", height=260,
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", height=300,
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
         font={"family": FONT_STACK, "size": 11},
         uirevision="room",
@@ -511,7 +603,7 @@ def render_room_map(snapshot, room_config):
                "yaxis": {**axis, "range": [-0.2, depth + 0.2]},
                "zaxis": {**axis, "range": [0, ROOM_HEIGHT_METERS + 0.1]},
                "aspectmode": "data",
-               "camera": {"eye": {"x": -1.05, "y": -1.5, "z": 1.1},
+               "camera": {"eye": {"x": -0.8, "y": -1.15, "z": 0.8},
                           "center": {"x": 0, "y": 0, "z": -0.15}}},
     )
     return figure
@@ -569,7 +661,9 @@ def render_vitals(snapshot):
             html.Span(" br/min", style={"color": MUTED_TEXT}),
             html.Span(f"   BNR {breathing['bnr']:.2f} · "
                       f"{breathing['devices']} RX · "
-                      f"{breathing.get('window_seconds', 0):.0f} s window"
+                      f"{breathing.get('window_seconds', 0):.0f} s window · "
+                      f"±{30.0 / max(breathing.get('window_seconds', 30), 1):.1f}"
+                      " (FFT resolution)"
                       + (" · settling" if breathing.get(
                           "window_seconds", 99) < 20 else ""),
                       style={"color": MUTED_TEXT, "fontSize": "12px",
@@ -599,6 +693,64 @@ def render_spectrogram(snapshot):
                "x": 0.02, "font": {"size": 11, "color": TEXT_COLOR}},
         xaxis={"title": "seconds ago"}, yaxis={"title": "Hz"})
     return figure
+
+
+def render_signal_intel(snapshot, room_config):
+    """PANEL — research-derived link metrics and CARM speed profile."""
+    analytics = snapshot.get("analytics") or {}
+    spectrogram = analytics.get("spectrogram") or {}
+    profile = spectrogram.get("speed_profile")
+    positions = room_config.get("device_positions", {})
+    transmitter = next((p for p in positions.values()
+                        if str(p.get("label", "")).upper().startswith("TX")),
+                       None)
+    rows = []
+    header = html.Tr([html.Th(c, style={"textAlign": "left",
+                                        "padding": "2px 8px",
+                                        "color": ACCENT_CYAN})
+                      for c in ["Link", "Len", "Fresnel r1", "Rate",
+                                "Jitter", "Loss", "Activity"]])
+    for key, position in sorted(positions.items(), key=lambda kv: str(kv[0])):
+        if position is transmitter or transmitter is None:
+            continue
+        length = math.hypot(position["x"] - transmitter["x"],
+                            position["y"] - transmitter["y"])
+        radius = 0.5 * math.sqrt(WAVELENGTH_METERS * length)
+        stats = analytics.get("link_stats", {}).get(int(key), {})
+        activity = analytics.get("link_activity", {}).get(int(key))
+        cell = {"padding": "2px 8px"}
+        rows.append(html.Tr([
+            html.Td(f"TX→{position['label']}", style=cell),
+            html.Td(f"{length:.2f} m", style=cell),
+            html.Td(f"{radius * 100:.0f} cm", style=cell),
+            html.Td(f"{stats.get('rate_hz', 0):.0f} Hz", style=cell),
+            html.Td(f"{stats.get('jitter_ms', 0):.1f} ms", style=cell),
+            html.Td(f"{stats.get('loss_pct', 0):.1f}%", style=cell),
+            html.Td("--" if activity is None else f"{activity:.2f}",
+                    style=cell),
+        ]))
+    bars = []
+    labels = ["<1 Hz still", "1-2.5 slow", "2.5-5 walk", "5-10 fast"]
+    for label, share in zip(labels, profile or [0, 0, 0, 0]):
+        bars.append(html.Div([
+            html.Span(label, style={"width": "92px", "display":
+                                    "inline-block", "color": MUTED_TEXT}),
+            html.Div(style={
+                "display": "inline-block", "height": "8px",
+                "width": f"{int(share * 160)}px", "borderRadius": "4px",
+                "background": f"linear-gradient(90deg, {ACCENT_VIOLET}, "
+                              f"{ACCENT_CYAN})",
+                "verticalAlign": "middle"}),
+            html.Span(f" {share:.0%}", style={"color": TEXT_COLOR}),
+        ], style={"margin": "2px 0"}))
+    return html.Div([
+        html.Table([header] + rows, style={"fontSize": "11px",
+                                           "width": "100%"}),
+        html.Div("CARM speed profile (PCA + STFT energy share)",
+                 style={"marginTop": "10px", "color": ACCENT_CYAN,
+                        "fontSize": "11px", "letterSpacing": "1px"}),
+        html.Div(bars, style={"fontSize": "11px"}),
+    ])
 
 
 def render_heatmap(snapshot):
@@ -717,6 +869,7 @@ def run_dashboard(config, system_state, duration=None):
         Output("panel-vitals", "children"),
         Output("panel-spectrogram", "figure"),
         Output("panel-heatmap", "figure"),
+        Output("panel-signal-intel", "children"),
         Input("refresh-tick", "n_intervals"),
     )
     def refresh_all_panels(_tick_count):
@@ -733,6 +886,7 @@ def run_dashboard(config, system_state, duration=None):
             render_vitals(snapshot),
             render_spectrogram(snapshot),
             render_heatmap(snapshot),
+            render_signal_intel(snapshot, config["room"]),
         )
 
     host = dashboard_config["host"]

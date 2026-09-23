@@ -200,3 +200,11 @@ simulator physics.
 **Result:** Respiration, simulated (9 trials, random breathing 9–30 br/min, random body/room physics, standing/sitting/lying): mean absolute error 0.25 br/min, max 1.97, 8/9 within 1 br/min. Live simulated run: 18.1 br/min against a scripted 18. Bugs found on the way and fixed: low-edge peak from pose steps (read 7.1 br/min), and a weighted mean of two disagreeing receivers (15.1). End-to-end presence/pose unchanged at 100%/100%. 36 tests pass.
 **Why it matters / lesson:** Numbers are only as good as the time base and the segment you measure over; spectral estimates need uniform sampling and stillness. Simulation results only; the simulator's breathing is a clean sinusoid, so real-world error will be higher.
 **Follow-up:** Validate respiration against a reference (chest belt or counted breaths) on real ESP32 captures; localization is displayed but not validated (the simulator has no position model).
+
+## 2026-09-23 — Round 3: volumetric figures, room at true scale, Fresnel zones, signal panel
+**Type:** success
+**Phase:** 3 (dashboard; simulation only)
+**What happened:** Replaced stick figures with solid shaded bodies (dashboard/body_mesh.py: tapered limb capsules, torso and head volumes, one Mesh3d per body) with the tracked keypoint wire, scan rings, floor shadow and height callouts on top. Room map now draws the person at true scale inside the 5 × 4 × 2.6 m room, with translucent walls, metre ticks, ESP32 boxes and each link's first Fresnel zone (half-width sqrt(λd)/2 at 2.4 GHz, Fresnel-zone sensing model). New Signal Intelligence panel: per-link length, Fresnel radius, packet rate, jitter, loss, activity, and the CARM speed profile (share of PCA+STFT energy in 4 bands). Respiration panel now states its FFT resolution (± 30/window s br/min) while settling.
+**Result:** 37 tests pass; Phase 3 gate passes with 11 panels; screenshots checked by eye. Detection numbers unchanged.
+**Why it matters / lesson:** Every added number is either measured by the pipeline or computed from geometry; body depth and volume remain display-only.
+**Follow-up:** Real ESP32 validation (Phase 6).
