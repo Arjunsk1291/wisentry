@@ -184,3 +184,11 @@ panel renders correctly; the lying shot clearly shows the 0.3 Hz breathing
 modulation in the CSI waveform — nice incidental validation of the
 simulator physics.
 **Follow-up:** re-run the script after any dashboard change.
+
+## 2026-09-23 — End-to-end evaluation finds two detector bugs; fixed; dashboard redesign
+**Type:** failure → success
+**Phase:** 2–3 (simulation only; no hardware yet)
+**What happened:** Added an attenuation-profile feature (21 auxiliary model inputs), a larger pose head, sequence-level train/val split and per-sequence domain randomisation (shadow depth ±20%, width ±20%, noise 0.8–1.6×) in train_all.py. Then wrote an offline end-to-end check that runs the scripted 30 s scenario through the real parser → SignalProcessor → MlEngine → detector (3 seeds × 60 s, 2 and 6 simulated receivers, nominal and randomised physics, 2.5 s ignored after each scripted change).
+**Result:** Validation (synthetic): presence 96.33% → 97.80%, pose 82.08% → 91.03% (new split is stricter: whole sequences held out). End-to-end, the original code scored pose 52.7% (2 receivers) and 18.9–29.1% (6 receivers): standing and sitting after walking in were held as "walking". Two causes found: (1) a receiver's model voted "walking" with near-zero motion energy; fixed with a physics gate (walking needs motion energy ≥ 0.12 on some receiver). (2) With 6 receivers one receiver's presence model read the empty room as 0.99 occupied and kept breaking the off-vote streak (presence 90.2%); fixed by fusing presence as the median of each receiver's latest probability. After both fixes: presence 100% and pose 100% in all four end-to-end configurations. A class-weighted presence loss was tried and reverted (presence val fell to 89.8%). 31 tests pass; Phase 3 gate passes.
+**Why it matters / lesson:** Window-level validation accuracy hid scenario-level failures; the end-to-end check is the number that matches what the dashboard shows. All figures are simulation results, not real-world accuracy.
+**Follow-up:** Real ESP32 captures (Phase 6) to test whether the gate threshold and fusion hold on real CSI. Dashboard: dark theme and 3D skeleton view (depth is a display heuristic from 2D keypoints, not a 3D estimate).
