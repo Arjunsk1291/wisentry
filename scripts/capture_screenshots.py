@@ -2,7 +2,7 @@
 
 Run from the project root (starts the app itself):
 
-    python tests/capture_screenshots.py
+    python scripts/capture_screenshots.py
 
 Spawns `python main.py --simulate`, opens the dashboard in headless
 Chromium (Playwright), waits for specific moments of the 30 s scripted

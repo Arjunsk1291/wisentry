@@ -3,17 +3,17 @@
 
 ## 0. SESSION PROTOCOL (do this first, every session)
 
-1. Read `PROJECT_LOG.md`. The **Current State** section at the top tells you
+1. Read `docs/dev/PROJECT_LOG.md`. The **Current State** section at the top tells you
    exactly which phase is active, what passed, what failed, and what to do next.
 2. Run `python setup_check.py` if it exists. Fix environment drift before features.
 3. Work. Follow the phase plan in §6.
 4. Before the session ends (or after any milestone, success, or failure):
-   - Append a dated entry to `PROJECT_LOG.md` (template inside that file).
+   - Append a dated entry to `docs/dev/PROJECT_LOG.md` (template inside that file).
    - Update its **Current State** section.
    - Commit with a conventional-commit message (§10). Never leave work uncommitted.
 
 If anything in this file conflicts with reality (an API changed, a library is
-gone), reality wins — but record the deviation in `PROJECT_LOG.md` and update
+gone), reality wins — but record the deviation in `docs/dev/PROJECT_LOG.md` and update
 this file in the same commit.
 
 ---
@@ -241,7 +241,7 @@ per pose, and occasional dropped/out-of-order packets to harden the parser.
   1042 frames").
 - One logical change per commit. A phase completion is its own commit whose
   body quotes the gate result.
-- `PROJECT_LOG.md` updates ride along with the work they describe.
+- `docs/dev/PROJECT_LOG.md` updates ride along with the work they describe.
 - Never commit `saved/`, `logs/`, datasets, or `__pycache__` (`.gitignore`
   enforces this).
 

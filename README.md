@@ -66,7 +66,7 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 ```
 
 - **Wire protocol v1** is pinned byte-for-byte across firmware, simulator,
-  and parser ([engineering specification](ENGINEERING_SPEC.md#52-wire-protocol-v1--single-source-of-truth)) with a shared test vector.
+  and parser ([engineering specification](docs/ENGINEERING_SPEC.md#52-wire-protocol-v1--single-source-of-truth)) with a shared test vector.
 - **Training = runtime**: `models/train_all.py` generates data by pushing
   simulator physics through the same SignalProcessor used live.
 - **Honest metrics**: shipped weights are synthetic-trained
@@ -83,18 +83,18 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 | [docs/windows_setup.md](docs/windows_setup.md) | Windows + Arduino IDE flashing, every click |
 | [docs/ubuntu_setup.md](docs/ubuntu_setup.md) | Ubuntu differences + arduino-cli path |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | 30 symptoms with fixes |
-| [ENGINEERING_SPEC.md](ENGINEERING_SPEC.md) | full engineering specification |
-| [PROJECT_LOG.md](PROJECT_LOG.md) | dated ledger of every test, success, and failure |
+| [docs/ENGINEERING_SPEC.md](docs/ENGINEERING_SPEC.md) | full engineering specification |
+| [docs/dev/PROJECT_LOG.md](docs/dev/PROJECT_LOG.md) | dated ledger of every test, success, and failure |
 
 ## Development
 
 ```bash
 python -m pytest tests/        # unit tests (parser, DSP, detector, simulator)
 python models/train_all.py     # retrain all three models
-python tests/gate_phase3.py --spawn   # end-to-end dashboard gate
+python scripts/gate_phase3.py --spawn   # end-to-end dashboard gate
 ```
 
 Project history, including what failed and why, lives in
-[PROJECT_LOG.md](PROJECT_LOG.md). CI runs the test suite on Python 3.10 and 3.11.
+[docs/dev/PROJECT_LOG.md](docs/dev/PROJECT_LOG.md). CI runs the test suite on Python 3.10 and 3.11.
 Model-dependent tests skip when synthetic-trained weights are absent; the status
 is reported rather than treated as a verified model result.

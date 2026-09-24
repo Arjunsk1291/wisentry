@@ -149,7 +149,7 @@ Expected with the shipped models — they are trained on **synthetic**
 data and validate the pipeline, not your room. Collect real labeled
 data (`python main.py --collect --label standing`, etc.) and retrain
 (`python models/train_all.py --real` once Phase 6 lands; see
-PROJECT_LOG.md for status). Until then treat pose as a demo.
+docs/dev/PROJECT_LOG.md for status). Until then treat pose as a demo.
 
 **29. Pose stuck on "walking" whenever anyone moves at all.**
 Lower `detection.pose_confidence_threshold` (0.6 → 0.5) and confirm at
@@ -164,6 +164,6 @@ If the laptop's CPU is pegged, check that only one `main.py` is running.
 ---
 
 Still stuck? Read the terminal output carefully — every WiSentry error
-message says what to fix — then check PROJECT_LOG.md for known issues,
+message says what to fix — then check docs/dev/PROJECT_LOG.md for known issues,
 then open a GitHub issue with: your OS, the exact command, and the full
 terminal output.
