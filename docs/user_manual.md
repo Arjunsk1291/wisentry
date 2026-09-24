@@ -155,11 +155,14 @@ This is how you reach the real accuracy targets (presence >95%, pose
    python main.py --collect --label lying    --duration 120
    python main.py --collect --label walking  --duration 120
    ```
-   (`empty` = nobody in the room.) Each run saves labeled windows into
-   `logs/dataset/`.
-2. Retrain on your data — real-data training arrives with Phase 6
-   (`python models/train_all.py --real`); check `PROJECT_LOG.md` at the
-   repo root for current status.
+   (`empty` = nobody in the room.) Start each run with the room empty for
+   ~5 s (the empty-room baseline), then walk in and hold the pose. Each run
+   saves labeled windows into `logs/dataset/`.
+2. Check the capture: `python scripts/check_capture.py` (PASS/FAIL per
+   receiver and per label). Then retrain on your data:
+   `python models/train_real.py --eval-only` shows how the synthetic models
+   do on your room; `python models/train_real.py` fine-tunes them and writes
+   `saved/real/`. Set `ml.model_dir: saved/real` in config.yaml to use them.
 3. Restart `python main.py`. The detector now uses models tuned to your
    actual room.
 
