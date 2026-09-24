@@ -25,7 +25,7 @@ from backend.data_logger import DataLogger
 from backend.csi_analytics import CsiAnalytics
 from backend.detector import PresencePoseDetector, SystemState
 from backend.ml_engine import MlEngine
-from backend.signal_processor import SignalProcessor
+from backend.signal_processor import SignalProcessor, build_auxiliary_vector
 from backend.udp_server import UdpCsiServer
 
 PIPELINE_QUEUE_POLL_SECONDS = 0.5
@@ -114,11 +114,10 @@ class Pipeline(threading.Thread):
         """Route a FeatureWindow to detection or dataset collection."""
         if self._collect_label is not None:
             self._collected_band_matrices.append(feature_window.band_matrix)
-            self._collected_auxiliary.append([
-                feature_window.motion_energy,
-                feature_window.baseline_deviation,
-                feature_window.breathing_energy,
-            ])
+            # Same auxiliary contract the models train and infer on
+            # (21 values), so collected real data is directly trainable.
+            self._collected_auxiliary.append(
+                build_auxiliary_vector(feature_window).tolist())
             return
         self._detector.process_window(feature_window)
         self.windows_detected += 1

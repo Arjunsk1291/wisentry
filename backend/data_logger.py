@@ -115,8 +115,8 @@ class DataLogger:
             label (str): Class label ("empty", "standing", "sitting",
                 "lying", "walking").
             band_matrices (list[np.ndarray]): z-scored [W, B] windows.
-            auxiliary_features (list[list[float]]): per-window
-                [motion, deviation, breathing] scalars.
+            auxiliary_features (list[list[float]]): per-window auxiliary
+                vectors from signal_processor.build_auxiliary_vector (21).
 
         Returns:
             Path: The dataset file that was written.
