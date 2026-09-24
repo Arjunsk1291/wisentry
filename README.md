@@ -50,8 +50,7 @@ all real-world accuracy as work to validate, not as a completed claim.
 2–4 × ESP32-WROOM-32 boards (~$5 each) + USB power. That's the entire BOM.
 
 1. Flash `firmware/csi_transmitter/` to one board, `firmware/csi_receiver/`
-   to the rest — step-by-step: [docs/windows_setup.md](docs/windows_setup.md)
-   / [docs/ubuntu_setup.md](docs/ubuntu_setup.md)
+   to the rest — step-by-step: [docs/setup.md](docs/setup.md)
 2. Place them per [docs/placement_guide.md](docs/placement_guide.md)
 3. `python main.py`
 
@@ -80,9 +79,7 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 | [docs/user_manual.md](docs/user_manual.md) | 10 chapters, unboxing → live dashboard |
 | [docs/hardware_bom.md](docs/hardware_bom.md) | exact parts, prices, where to buy |
 | [docs/placement_guide.md](docs/placement_guide.md) | room diagrams, coverage tables |
-| [docs/windows_setup.md](docs/windows_setup.md) | Windows + Arduino IDE flashing, every click |
-| [docs/ubuntu_setup.md](docs/ubuntu_setup.md) | Ubuntu differences + arduino-cli path |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | 30 symptoms with fixes |
+| [docs/setup.md](docs/setup.md) | Windows + Ubuntu setup, ESP32 flashing, 30 troubleshooting fixes |
 | [docs/ENGINEERING_SPEC.md](docs/ENGINEERING_SPEC.md) | full engineering specification |
 | [docs/dev/PROJECT_LOG.md](docs/dev/PROJECT_LOG.md) | dated ledger of every test, success, and failure |
 

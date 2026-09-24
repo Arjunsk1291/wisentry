@@ -37,7 +37,7 @@ phone chargers, and your laptop. Nothing else.
 
 ## Chapter 3 — Install the software (no hardware needed)
 
-Follow Part A of `docs/windows_setup.md` (or `docs/ubuntu_setup.md`).
+Follow Part A of the Windows (or Ubuntu) section in `docs/setup.md`.
 End state: `python setup_check.py` prints all `[ OK ]`.
 
 ## Chapter 4 — Your first run: simulation mode
@@ -180,7 +180,7 @@ Re-collect whenever you rearrange furniture or move the boards.
 - **Health checks:** Device Table for ONLINE status and RSSI; the
   waveform panel for live signal; `python setup_check.py` after any
   software change.
-- **When something breaks:** `docs/troubleshooting.md` — 30 symptoms
+- **When something breaks:** `docs/setup.md` (Troubleshooting section) — 30 symptoms
   with fixes.
 
 Privacy note, since people will ask you: WiSentry senses *that* a body

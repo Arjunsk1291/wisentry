@@ -199,7 +199,7 @@ wisentry/
 │                 test_detector.py test_simulator.py …
 ├── logs/         (runtime, git-ignored)
 └── docs/         user_manual.md hardware_bom.md placement_guide.md
-                  windows_setup.md ubuntu_setup.md troubleshooting.md
+                  setup.md (Windows, Ubuntu, troubleshooting)
 ```
 
 ## 8. DASHBOARD — 7 PANELS
