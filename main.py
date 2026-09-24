@@ -242,7 +242,7 @@ def main():
     )
     data_logger = DataLogger(config["logging"])
     system_state.event_listeners.append(data_logger.log_event)
-    udp_server = UdpCsiServer(config["network"])
+    udp_server = UdpCsiServer(config["network"], on_heard=system_state.note_heard)
     pipeline = Pipeline(
         config, udp_server, system_state, data_logger,
         collect_label=arguments.label if arguments.collect else None,

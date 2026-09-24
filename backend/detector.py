@@ -61,6 +61,7 @@ class SystemState:
         self._position_estimate = None
         self._events = deque(maxlen=event_log_max_entries)
         self._device_stats = {}
+        self._device_heard = {}
         self._waveforms = {}
         self._analytics = {}
         self._frames_processed = 0
@@ -122,6 +123,15 @@ class SystemState:
         for listener_callable in listeners:
             listener_callable(event_kind, message)
 
+    def note_heard(self, device_id, sender_ip, receive_time):
+        """Record that a device's datagram reached the laptop (liveness).
+
+        Called from the UDP receive thread, ahead of processing, so the
+        dashboard can tell "device offline" apart from "pipeline behind".
+        """
+        with self._lock:
+            self._device_heard[device_id] = (receive_time, sender_ip)
+
     def snapshot(self):
         """Return a consistent copy of everything the dashboard needs.
 
@@ -142,7 +152,11 @@ class SystemState:
                 "position_estimate": self._position_estimate,
                 "events": list(self._events),
                 "device_stats": {
-                    device_id: dict(stats)
+                    device_id: dict(
+                        stats,
+                        last_heard=self._device_heard.get(
+                            device_id, (stats["last_seen"], None))[0],
+                    )
                     for device_id, stats in self._device_stats.items()
                 },
                 "waveforms": {

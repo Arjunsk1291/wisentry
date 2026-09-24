@@ -791,11 +791,18 @@ def render_event_log(snapshot):
     return rows or html.Div("no events yet", style={"color": MUTED_TEXT})
 
 
-def _online_device_count(snapshot, timeout_seconds=2.0):
+def _last_contact(stats):
+    """Latest time we heard from a device (receive thread or pipeline)."""
+    return max(stats.get("last_heard", 0.0), stats["last_seen"])
+
+
+def _online_device_count(snapshot, timeout_seconds=None):
     """Devices that sent a packet within the timeout."""
-    now = time.time()
+    if timeout_seconds is None:
+        timeout_seconds = snapshot.get("device_timeout_seconds", 2.0)
+    now = snapshot.get("render_time", time.time())
     return sum(1 for stats in snapshot["device_stats"].values()
-               if now - stats["last_seen"] <= timeout_seconds)
+               if now - _last_contact(stats) <= timeout_seconds)
 
 
 def render_coverage(snapshot):
@@ -817,15 +824,17 @@ def render_coverage(snapshot):
     ])
 
 
-def render_device_table(snapshot, timeout_seconds=2.0):
+def render_device_table(snapshot, timeout_seconds=None):
     """PANEL 7 — Device ID | IP | RSSI | Packets/s | Status."""
-    now = time.time()
+    if timeout_seconds is None:
+        timeout_seconds = snapshot.get("device_timeout_seconds", 2.0)
+    now = snapshot.get("render_time", time.time())
     header = html.Tr([html.Th(col, style={"textAlign": "left",
                                           "padding": "4px 10px"})
                       for col in ["Device", "IP", "RSSI", "Packets", "Status"]])
     body_rows = []
     for device_id, stats in sorted(snapshot["device_stats"].items()):
-        online = now - stats["last_seen"] <= timeout_seconds
+        online = now - _last_contact(stats) <= timeout_seconds
         status_cell = html.Td("● ONLINE" if online else "● OFFLINE",
                               style={"color": "#4ade80" if online
                                      else "#f87171", "padding": "4px 10px"})
@@ -858,6 +867,9 @@ def run_dashboard(config, system_state, duration=None):
         int(dashboard_config["update_interval_ms"]),
     )
 
+    device_timeout = float(
+        config["network"].get("device_timeout_seconds", 2.0))
+
     @app.callback(
         Output("panel-status-bar", "children"),
         Output("panel-waveform", "figure"),
@@ -874,6 +886,10 @@ def run_dashboard(config, system_state, duration=None):
     )
     def refresh_all_panels(_tick_count):
         snapshot = system_state.snapshot()
+        # One clock reading per refresh so every panel agrees on which
+        # devices are online, even if slow figures delay later panels.
+        snapshot["render_time"] = time.time()
+        snapshot["device_timeout_seconds"] = device_timeout
         return (
             render_status_bar(snapshot),
             render_waveform(snapshot,

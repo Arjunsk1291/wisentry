@@ -16,20 +16,25 @@ from backend.csi_parser import CsiParseError, parse_csi_datagram
 
 RECEIVE_BUFFER_BYTES = 2048      # max expected datagram is 12 + 2*256 bytes
 SOCKET_TIMEOUT_SECONDS = 0.5     # lets the thread notice stop requests
-FRAME_QUEUE_MAX_SIZE = 4096      # backpressure cap; drops oldest behaviour
+FRAME_QUEUE_MAX_SIZE = 1024      # backpressure cap (~3 s at 6 RX x 50 Hz); drops oldest
 PARSE_ERROR_REPORT_INTERVAL = 100  # log every Nth malformed datagram
 
 
 class UdpCsiServer(threading.Thread):
     """Background thread feeding parsed CSI frames into a queue."""
 
-    def __init__(self, network_config):
+    def __init__(self, network_config, on_heard=None):
         """Create (but do not yet start) the server thread.
 
         Args:
             network_config (dict): `network` section of config.yaml
                 (keys: udp_listen_host, udp_listen_port).
+            on_heard (callable | None): Called as on_heard(device_id, ip,
+                receive_time) for every valid datagram, on the receive
+                thread, so device liveness does not depend on how far
+                behind the processing pipeline is.
         """
+        self._on_heard = on_heard
         super().__init__(name="UdpCsiServer", daemon=True)
         self.listen_host = network_config.get("udp_listen_host", "0.0.0.0")
         self.listen_port = int(network_config.get("udp_listen_port", 5566))
@@ -75,6 +80,9 @@ class UdpCsiServer(threading.Thread):
                 print(f"udp_server: malformed datagram from "
                       f"{sender_address[0]}: {parse_error}")
             return
+        if self._on_heard is not None:
+            self._on_heard(parsed_frame.device_id, sender_address[0],
+                           parsed_frame.receive_time)
         try:
             self.frame_queue.put_nowait((parsed_frame, sender_address[0]))
         except queue.Full:
