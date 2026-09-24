@@ -68,7 +68,7 @@ What you should be seeing (simulation mode):
 
 | Empty room | Person lying down |
 |---|---|
-| ![empty](screenshots/dashboard_empty.png) | ![lying](screenshots/dashboard_lying.png) |
+| ![empty](screenshots/dashboard_empty.jpg) | ![lying](screenshots/dashboard_lying.jpg) |
 
 Note in the right-hand shot how the CSI waveform shows a slow sine wave —
 that is the simulated person's **breathing** modulating the radio field,

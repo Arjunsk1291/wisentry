@@ -5,16 +5,32 @@ people by measuring how their bodies disturb WiFi radio waves (Channel State
 Information). A laptop runs the ML inference and a live dashboard. No cameras,
 no radar, no cloud - the runtime is local.
 
-![status](https://img.shields.io/badge/phases%200--5-complete-brightgreen)
 ![CI](https://github.com/Arjunsk1291/wisentry/actions/workflows/ci.yml/badge.svg)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue)
 
-![WiSentry dashboard — person walking](docs/screenshots/dashboard_walking.png)
-*Live dashboard in simulation mode: a person walking is detected at 90%
-confidence — waveform disturbance, stick figure, room-map position, and
-event history all update at 5 Hz. More: [empty room](docs/screenshots/dashboard_empty.png) ·
-[sitting](docs/screenshots/dashboard_sitting.png) ·
-[lying](docs/screenshots/dashboard_lying.png)*
+![WiSentry live dashboard: walk in, stand, sit, lie down](docs/screenshots/demo.gif)
+
+*Live dashboard in simulation mode (physics-based CSI simulator, 2 receivers).
+Stills: [walking](docs/screenshots/dashboard_walking.jpg) ·
+[standing](docs/screenshots/dashboard_standing.jpg) ·
+[sitting](docs/screenshots/dashboard_sitting.jpg) ·
+[lying](docs/screenshots/dashboard_lying.jpg) ·
+[empty room](docs/screenshots/dashboard_empty.jpg)*
+
+## What it shows
+
+- **Presence and pose** (standing / sitting / lying / walking) from small CNNs
+  on per-band CSI attenuation features.
+- **True-scale 3D room** with each TX→RX link and its first Fresnel zone, so
+  you can see where a body actually disturbs the signal.
+- **Breathing rate** from sub-millimetre chest motion when a person is still.
+- **Motion spectrogram** (PCA + STFT, CARM-style speed profile) that separates
+  still, slow and walking motion.
+- **Signal intelligence** per link: packet rate, jitter, loss, Fresnel radius.
+- **Device health**: per-receiver RSSI, packet counts and online status.
+
+The 3D body is a display of the detected pose class. Depth and volume are a
+rendering effect, not 3D pose estimation.
 
 ## Detection tiers
 
@@ -61,7 +77,9 @@ ESP32 TX ──100 pkt/s──> air (person disturbs multipath) ──> ESP32 RX
 ESP32 RX ──UDP wire protocol v1──> laptop
 laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
          band features) → CNN models / rule fallback → debounced detector
-         → Dash dashboard (7 panels, 5 Hz)
+                        ↘ csi_analytics (respiration, PCA+STFT spectrogram,
+                          link stats)
+         → Dash dashboard (11 panels, 2.5 Hz)
 ```
 
 - **Wire protocol v1** is pinned byte-for-byte across firmware, simulator,
@@ -69,8 +87,14 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 - **Training = runtime**: `models/train_all.py` generates data by pushing
   simulator physics through the same SignalProcessor used live.
 - **Honest metrics**: shipped weights are synthetic-trained
-  (`saved/metrics.json` is tagged `"data": "synthetic"`); collect your own
-  data with `python main.py --collect --label standing` to calibrate.
+  (`saved/metrics.json` is tagged `"data": "synthetic"`). Calibrate on your
+  own room:
+  ```bash
+  python main.py --collect --label standing --duration 120   # repeat per label
+  python scripts/check_capture.py                            # PASS/FAIL per receiver + label
+  python models/train_real.py --eval-only                    # sim-to-real gap
+  python models/train_real.py                                # fine-tune -> saved/real/
+  ```
 
 ## Documentation
 
@@ -89,6 +113,8 @@ laptop:  udp_server → csi_parser → signal_processor (Hampel, Butterworth,
 python -m pytest tests/        # unit tests (parser, DSP, detector, simulator)
 python models/train_all.py     # retrain all three models
 python scripts/gate_phase3.py --spawn   # end-to-end dashboard gate
+CHROME_PATH=/path/to/chrome python scripts/make_media.py --receivers 2   # regenerate every screenshot + demo video
+python scripts/make_carousel.py         # summary slides from those screenshots
 ```
 
 Project history, including what failed and why, lives in

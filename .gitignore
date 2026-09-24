@@ -19,3 +19,6 @@ saved/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated media (python scripts/make_media.py)
+media/
